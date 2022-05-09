@@ -62,6 +62,9 @@ export default class ConnectionsProvider {
 	 * @param node 
 	 */
   public connect(node: ConnectionNode): Promise<Connection> {
+		if (!node?.id) {
+			return Promise.reject(new Error('No connection provided'));
+		}
 		if (node.id in this.connections && ['online', 'connecting'].includes(this.connections[node.id].status)) {
 			const existingPromise = this.connections[node.id].promise;
 			if(existingPromise) {
@@ -344,6 +347,9 @@ export default class ConnectionsProvider {
 	 * @param node 
 	 */
 	public async disconnect(node: ConnectionNode): Promise<void> {
+		if (!node?.id) {
+			return Promise.reject(new Error('No connection provided'));
+		}
 		const connection = this.getConnection(node);
 		if (connection && connection.status === 'online') {
 			connection.client.end();

@@ -61,6 +61,25 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		this._onDidChangeTreeData.fire();
 	}
 
+	public async connect(id: string): Promise<void> {
+		const node = <ConnectionNode>this.allTreeNodes[id];
+		if (node?.id) {
+			await this.connectionsProvider.connect(node);
+		}
+		else {
+			throw new Error(`${id} not found`);
+		}
+	}
+	public async disconnect(id: string): Promise<void> {
+		const node = <ConnectionNode>this.allTreeNodes[id];
+		if (node?.id) {
+			await this.connectionsProvider.disconnect(node);
+		}
+		else {
+			throw new Error(`${id} not found`);
+		}
+	}
+
 	public openLink(node: TreeNode): void {
 		if (node.type === 'portForward') {
 			let portForward = (<PortForwardNode>node).portForward;
@@ -163,9 +182,9 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 		let vsConfigurations: ConnectionConfig[] = vscode.workspace.getConfiguration('ssh-connect').get('connections') || [];
 		for (const configuration of vsConfigurations) {
-			const node = this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
-			if((<ConnectionNode>node)?.id) {
-				this.allTreeNodes[(<ConnectionNode>node!).id] = node!;
+			const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
+			if(node?.id) {
+				this.allTreeNodes[node!.id] = node!;
 			}
 		}
 
@@ -214,9 +233,9 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 					}
 
 					for (const configuration of configurations) {
-						const node = this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
-						if((<ConnectionNode>node).id) {
-							this.allTreeNodes[(<ConnectionNode>node!).id] = node!;
+						const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
+						if(node.id) {
+							this.allTreeNodes[node.id] = node;
 						}
 					}
 				}
