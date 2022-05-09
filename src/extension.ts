@@ -12,27 +12,26 @@ export async function activate(context: vscode.ExtensionContext) {
 		const sshConnectProvider = new SSHConnectProvider(context, connectionsProvider);
 		vscode.window.registerTreeDataProvider('ssh-connect.mainview', sshConnectProvider);
 
-		vscode.commands.registerCommand('ssh-connect.connect', async (node: ConnectionNode | string) => {
+		vscode.commands.registerCommand('ssh-connect.connect', async (node: ConnectionNode | string[]) => {
 			try {
-				// connect by id or node
-				if (typeof node === 'string') {
-					await sshConnectProvider.connect(node);
+				if (node.constructor === Array) {
+					await sshConnectProvider.connect(node[0]);
 				}
-				else {
-					await connectionsProvider.connect(node);
+				else  {
+					await connectionsProvider.connect(<ConnectionNode>node);
 				}
 			} catch (e) {
 				outputChannel.appendLine(e.message);
 				vscode.window.showErrorMessage(e.message);
 			}
 		}); 
-		vscode.commands.registerCommand('ssh-connect.disconnect', async (node: ConnectionNode | string) => {
+		vscode.commands.registerCommand('ssh-connect.disconnect', async (node: ConnectionNode | string[]) => {
 			try {
-				if (typeof node === 'string') {
-					await sshConnectProvider.disconnect(node);
+				if (node.constructor === Array) {
+					await sshConnectProvider.disconnect(node[0]);
 				}
 				else {
-					await connectionsProvider.disconnect(node);
+					await connectionsProvider.disconnect(<ConnectionNode>node);
 				}
 			} catch (e) {
 				outputChannel.appendLine(e.message);
