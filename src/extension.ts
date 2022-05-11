@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import ConnectionsProvider from './classes/ConnectionsProvider';
-import SSHConnectProvider, { ConnectionNode, PortForwardNode } from './classes/SSHConnectProvider';
+import SSHConnectProvider, { ConnectionNode, PortForwardNode, ConnectionCommandNode, PortCommandNode } from './classes/SSHConnectProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
 	try {
@@ -44,6 +44,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		vscode.commands.registerCommand('ssh-connect.refresh', () => sshConnectProvider.fullRefresh());
 		vscode.commands.registerCommand('ssh-connect.openLink', (node: PortForwardNode) => sshConnectProvider.openLink(node));
+		vscode.commands.registerCommand('ssh-connect.runCommand', (node: ConnectionCommandNode | PortCommandNode) => {
+			if(node.type === 'portCommand') {
+				sshConnectProvider.runPortCommand(<PortCommandNode>node);
+			}
+			else {
+				connectionsProvider.runCommand(<ConnectionCommandNode>node);
+			}
+		});
 	}
 	catch (error) {
 		console.error(error);

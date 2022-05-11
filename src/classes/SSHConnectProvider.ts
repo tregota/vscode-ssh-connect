@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
+import ConnectionConfig, { ConnectionCommandConfig, PortForwardConfig, PortCommandConfig } from './ConnectionConfig';
 import ConnectionsProvider from './ConnectionsProvider';
 import { readFileSync } from 'fs';
 
@@ -14,9 +14,15 @@ export interface ConnectionNode extends TreeNode {
 	folder?: string
 	config: ConnectionConfig
 }
+export interface ConnectionCommandNode extends TreeNode {
+	config: ConnectionCommandConfig
+}
 export interface PortForwardNode extends TreeNode {
 	id: string
 	portForward: PortForwardConfig
+}
+export interface PortCommandNode extends TreeNode {
+	config: PortCommandConfig
 }
 export interface FolderNode extends TreeNode {
 	config: ConnectionConfig
@@ -87,6 +93,16 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		}
 	}
 
+	public async runPortCommand(node: PortCommandNode): Promise<void> {
+		try {
+
+		}
+		catch (error) {
+			vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+		}
+	}
+
+
 	public getTreeItem(node: TreeNode): vscode.TreeItem {
 		let icon = 'question';
 		let iconPath;
@@ -94,6 +110,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		let status;
 		let description: string | undefined;
 		let subtype = '';
+		let collapsibleState = node.children.length ? (node.children.find(c => c.type === 'connection') ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed) : vscode.TreeItemCollapsibleState.None;
 
 		if (node.type === 'connection') {
 			const connectionNode = <ConnectionNode>node;
@@ -151,6 +168,9 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				}
 			}
 		}
+		else if (node.type === 'portCommand' || node.type === 'connectionCommand') {
+			icon = 'code';
+		}
 		else {
 			const folderNode = <FolderNode>node;
 			iconPath = folderNode.config.iconPath || this.context.asAbsolutePath('media/folder.svg');
@@ -159,7 +179,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		return {
 			label: node.name,
 			contextValue: status ? `${node.type}${subtype}.${status}` : node.type,
-			collapsibleState: node.children.length ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None,
+			collapsibleState,
 			iconPath: iconPath || new vscode.ThemeIcon(icon, color),
 			description
 		};
@@ -287,16 +307,47 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						name += ` ➝ ${portForward.dstPort}`;
 					}
 
-					connectionNode.children.push(<PortForwardNode>{
+					const portForwardNode = <PortForwardNode>{
 						id: `${portForward.srcAddr}:${portForward.srcPort}:${portForward.dstAddr}:${portForward.dstPort}`,
 						name,
 						type: 'portForward',
 						parent: connectionNode,
 						portForward,
 						children: []
+					};
+					connectionNode.children.push(portForwardNode);
+
+					if (portForward.commands) {
+						for (const command of portForward.commands) {
+							// let interpolatedCommand: string = command.command;
+							// for (const keyValue in Object.entries(portForward)) {
+							// 	const regex = new RegExp(`{{[ ]*${keyValue[0]}[ ]*}}`);
+							// 	interpolatedCommand = interpolatedCommand.replace(regex, keyValue[1]);
+							// }
+							portForwardNode.children.push(<PortCommandNode>{
+								name: command.id,
+								type: 'portCommand',
+								parent: portForwardNode,
+								config: command,
+								children: []
+							});
+						}
+					}
+				}
+			}
+
+			if (config.commands) {
+				for (const command of config.commands) {
+					connectionNode.children.push(<ConnectionCommandNode>{
+						name: command.id,
+						type: 'connectionCommand',
+						parent: connectionNode,
+						config: command,
+						children: []
 					});
 				}
 			}
+
 			return connectionNode;
 		}
 		return undefined;

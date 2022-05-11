@@ -1,12 +1,24 @@
 import { ConnectConfig } from 'ssh2';
 
+export interface PortCommandConfig {
+	id: string
+	type: "process" | "terminal"
+	command: string
+}
+
 export interface PortForwardConfig {
 	srcAddr?: string
 	srcPort: number
 	dstAddr: string
 	dstPort: number
-  type: string,
+  type: string
 	autoConnect?: boolean
+	commands: PortCommandConfig[]
+}
+
+export interface ConnectionCommandConfig {
+	id: string
+	command: string
 }
 
 export default interface ConnectionConfig extends ConnectConfig {
@@ -18,4 +30,5 @@ export default interface ConnectionConfig extends ConnectConfig {
 	x11Port?: number
 	jumpServer?: string
 	portForwards?: PortForwardConfig[]
+	commands: ConnectionCommandConfig[]
 }

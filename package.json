@@ -82,6 +82,11 @@
 				"command": "ssh-connect.openLink",
 				"title": "Open Link",
 				"icon": "media/openlink.svg"
+			},
+			{
+				"command": "ssh-connect.runCommand",
+				"title": "Open Link",
+				"icon": "media/connect.svg"
 			}
 		],
 		"menus": {
@@ -121,6 +126,11 @@
 				{
 					"command": "ssh-connect.openLink",
 					"when": "view == ssh-connect.mainview && viewItem == portForwardLinked.online",
+					"group": "inline@0"
+				},
+				{
+					"command": "ssh-connect.runCommand",
+					"when": "view == ssh-connect.mainview && viewItem =~ /(connection|port)Command/",
 					"group": "inline@0"
 				}
 			]
@@ -197,6 +207,24 @@
 								"type": "string",
 								"description": "Id of the connection that this connection has to be forwarded through"
 							},
+							"commands": {
+								"type": "array",
+								"description": "Run remote commands on the connected host",
+								"default": [],
+								"items": {
+									"type": "object",
+									"properties": {
+										"id": {
+											"type": "string",
+											"description": "Command label"
+										},
+										"command": {
+											"type": "string",
+											"description": "The command to run"
+										}
+									}
+								}
+							},
 							"portForwards": {
 								"type": "array",
 								"description": "Port Forwards",
@@ -232,7 +260,33 @@
 												"https",
 												"http"
 											],
-											"description": "open in e.g. browser"
+											"description": "displays button for opening port in browser"
+										},
+										"commands": {
+											"type": "array",
+											"description": "Run local commands using the forwarded port",
+											"default": [],
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": {
+														"type": "string",
+														"description": "Command label"
+													},
+													"type": {
+														"type": "string",
+														"enum": [
+															"process",
+															"terminal"
+														],
+														"description": "How to execute the command"
+													},
+													"command": {
+														"type": "string",
+														"description": "The command to execute on the port, portForward properties are available for interpolation like so: {{srcPort}}"
+													}
+												}
+											}
 										}
 									}
 								}
