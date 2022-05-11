@@ -207,24 +207,6 @@
 								"type": "string",
 								"description": "Id of the connection that this connection has to be forwarded through"
 							},
-							"commands": {
-								"type": "array",
-								"description": "Run remote commands on the connected host",
-								"default": [],
-								"items": {
-									"type": "object",
-									"properties": {
-										"id": {
-											"type": "string",
-											"description": "Command label"
-										},
-										"command": {
-											"type": "string",
-											"description": "The command to run"
-										}
-									}
-								}
-							},
 							"portForwards": {
 								"type": "array",
 								"description": "Port Forwards",
@@ -261,32 +243,6 @@
 												"http"
 											],
 											"description": "displays button for opening port in browser"
-										},
-										"commands": {
-											"type": "array",
-											"description": "Run local commands using the forwarded port",
-											"default": [],
-											"items": {
-												"type": "object",
-												"properties": {
-													"id": {
-														"type": "string",
-														"description": "Command label"
-													},
-													"type": {
-														"type": "string",
-														"enum": [
-															"process",
-															"terminal"
-														],
-														"description": "How to execute the command"
-													},
-													"command": {
-														"type": "string",
-														"description": "The command to execute on the port, portForward properties are available for interpolation like so: {{srcPort}}"
-													}
-												}
-											}
 										}
 									}
 								}

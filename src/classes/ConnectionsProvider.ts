@@ -3,7 +3,7 @@ import { Client, AuthHandlerResult } from 'ssh2';
 import { Server, Socket } from 'net';
 import SSHTerminal from './SSHTerminal';
 import { readFileSync } from 'fs';
-import { ConnectionCommandNode, ConnectionNode, PortForwardNode } from './SSHConnectProvider';
+import { ConnectionNode, PortForwardNode } from './SSHConnectProvider';
 import * as keytar from 'keytar';
 
 interface PortForward {
@@ -474,16 +474,6 @@ export default class ConnectionsProvider {
 			terminal.onDidClose(() => {
 				connection.terminals.delete(terminal);
 			});
-		}
-		catch (error) {
-			this.outputChannel.appendLine(`${node.name}: ${error.message}`);
-			vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
-		}
-	}
-
-	public async runCommand(node: ConnectionCommandNode): Promise<void> {
-		try {
-
 		}
 		catch (error) {
 			this.outputChannel.appendLine(`${node.name}: ${error.message}`);

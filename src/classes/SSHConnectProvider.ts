@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import ConnectionConfig, { ConnectionCommandConfig, PortForwardConfig, PortCommandConfig } from './ConnectionConfig';
+import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider from './ConnectionsProvider';
 import { readFileSync } from 'fs';
 
@@ -14,15 +14,10 @@ export interface ConnectionNode extends TreeNode {
 	folder?: string
 	config: ConnectionConfig
 }
-export interface ConnectionCommandNode extends TreeNode {
-	config: ConnectionCommandConfig
-}
+
 export interface PortForwardNode extends TreeNode {
 	id: string
 	portForward: PortForwardConfig
-}
-export interface PortCommandNode extends TreeNode {
-	config: PortCommandConfig
 }
 export interface FolderNode extends TreeNode {
 	config: ConnectionConfig
@@ -93,16 +88,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		}
 	}
 
-	public async runPortCommand(node: PortCommandNode): Promise<void> {
-		try {
-
-		}
-		catch (error) {
-			vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
-		}
-	}
-
-
 	public getTreeItem(node: TreeNode): vscode.TreeItem {
 		let icon = 'question';
 		let iconPath;
@@ -167,9 +152,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 					subtype = 'Linked';
 				}
 			}
-		}
-		else if (node.type === 'portCommand' || node.type === 'connectionCommand') {
-			icon = 'code';
 		}
 		else {
 			const folderNode = <FolderNode>node;
@@ -316,35 +298,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						children: []
 					};
 					connectionNode.children.push(portForwardNode);
-
-					if (portForward.commands) {
-						for (const command of portForward.commands) {
-							// let interpolatedCommand: string = command.command;
-							// for (const keyValue in Object.entries(portForward)) {
-							// 	const regex = new RegExp(`{{[ ]*${keyValue[0]}[ ]*}}`);
-							// 	interpolatedCommand = interpolatedCommand.replace(regex, keyValue[1]);
-							// }
-							portForwardNode.children.push(<PortCommandNode>{
-								name: command.id,
-								type: 'portCommand',
-								parent: portForwardNode,
-								config: command,
-								children: []
-							});
-						}
-					}
-				}
-			}
-
-			if (config.commands) {
-				for (const command of config.commands) {
-					connectionNode.children.push(<ConnectionCommandNode>{
-						name: command.id,
-						type: 'connectionCommand',
-						parent: connectionNode,
-						config: command,
-						children: []
-					});
 				}
 			}
 
