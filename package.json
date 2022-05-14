@@ -207,6 +207,16 @@
 								"type": "string",
 								"description": "Id of the connection that this connection has to be forwarded through"
 							},
+							"sshTerminalCommand": {
+								"type": "string",
+								"default": "ssh root@localhost -p %dstPort%",
+								"description": "if you want to use an external ssh terminal instead of built-in one, set this to the command to open it, %dstPort% is replaced with the local port number"
+							},
+							"sshTerminalCommandAsProcess": {
+								"type": "boolean",
+								"default": false,
+								"description": "if you have set sshTerminalCommand but you dont want to run it in a vscode terminal, set this to true"
+							},
 							"portForwards": {
 								"type": "array",
 								"description": "Port Forwards",

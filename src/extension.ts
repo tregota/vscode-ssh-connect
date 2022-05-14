@@ -21,8 +21,10 @@ export async function activate(context: vscode.ExtensionContext) {
 					await connectionsProvider.connect(<ConnectionNode>node);
 				}
 			} catch (e) {
-				outputChannel.appendLine(e.message);
-				vscode.window.showErrorMessage(e.message);
+				if (e) {
+					outputChannel.appendLine(e.message);
+					vscode.window.showErrorMessage(e.message);
+				}
 			}
 		}); 
 		vscode.commands.registerCommand('ssh-connect.disconnect', async (node: ConnectionNode | string[]) => {

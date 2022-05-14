@@ -5,19 +5,20 @@ import SSHTerminal from './SSHTerminal';
 import { readFileSync } from 'fs';
 import { ConnectionNode, PortForwardNode } from './SSHConnectProvider';
 import * as keytar from 'keytar';
+import { PortForwardConfig } from './ConnectionConfig';
+import { exec } from 'child_process';
 
 interface PortForward {
-	id: string
 	status: 'offline' | 'connecting' | 'online' | 'error'
 	server: Server
-	sockets: Set<Socket>
-	node: PortForwardNode
+	port?: number
+	close: () => void
 }
 
 interface Connection {
 	status: 'offline' | 'connecting' | 'online' | 'error'
 	client: Client
-	terminals: Set<SSHTerminal>
+	terminals: Set<SSHTerminal | vscode.Terminal>
 	ports: { [id: string]: PortForward }
 	node: ConnectionNode
 	promise?: Promise<Connection>
@@ -82,21 +83,17 @@ export default class ConnectionsProvider {
 			};
 			this.refresh();
 
-			const failedToConnect = () => {
-				reject();
+			const failedToConnect = (error?: Error) => {
+				reject(error);
 				this.connections[node.id].status = 'offline';
 				this.refresh();
 			};
 
 			if (!node.config.username) {
-				this.outputChannel.appendLine(`${node.name}: Username required`);
-				vscode.window.showErrorMessage(`${node.name}: Username required`);
-				return failedToConnect();
+				return failedToConnect(new Error('Username required'));
 			}
 			if (!node.config.host) {
-				this.outputChannel.appendLine(`${node.name}: Host required`);
-				vscode.window.showErrorMessage(`${node.name}: Host required`);
-				return failedToConnect();
+				return failedToConnect(new Error('Host required'));
 			}
 
 			let loginCancelCts = new vscode.CancellationTokenSource();
@@ -126,18 +123,20 @@ export default class ConnectionsProvider {
 			
 			// on failed or closed connection
 			client.on('close', () => {
-				if (this.connections[node.id].status === 'connecting') {
-					loginCancelCts.cancel();
-					return failedToConnect();
-				}
 				this.connections[node.id].status = 'offline';
 				this.refresh();
 			});
 			
 			// print connection errors
 			client.on('error', (error) => {
-				this.outputChannel.appendLine(`${node.name}: ${error.message}`);
-				vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+				if (this.connections[node.id].status === 'connecting') {
+					loginCancelCts.cancel();
+					return failedToConnect(error);
+				}
+				else {
+					this.outputChannel.appendLine(`${node.name}: ${error.message}`);
+					vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+				}
 			});
 			
       // handle incoming x11 connections
@@ -311,9 +310,7 @@ export default class ConnectionsProvider {
 					(connection) => {
 						connection.client.forwardOut('127.0.0.1', 0, node.config.host || 'localhost', node.config.port || 22, (error, stream) => {
 							if (error) {
-								this.outputChannel.appendLine(`${parentNode.name}: ${error.message}`);
-								vscode.window.showErrorMessage(`${parentNode.name}: ${error.message}`);
-								return failedToConnect();
+								return failedToConnect(error);
 							}
 							client.connect({
 								...node.config,
@@ -323,7 +320,7 @@ export default class ConnectionsProvider {
 							});
 						});
 					},
-					() => failedToConnect()
+					(error) => failedToConnect(error)
 				);
 			}
 			else {
@@ -380,75 +377,106 @@ export default class ConnectionsProvider {
 				return;
 			}
 
-			connection.ports[node.id] = {
-				id: node.id,
-				status: 'connecting',
-				server: new Server(),
-				sockets: new Set(),
-				node
-			};
-			this.refresh();
-
-			if (node.portForward.srcPort in this.ports) {
-				const existingPortForwardNode = this.ports[node.portForward.srcPort].node;
-				await this.closePort(existingPortForwardNode);
+			if (node.portForward.srcPort! in this.ports) {
+				this.ports[node.portForward.srcPort!].close();
 			}
-			this.ports[node.portForward.srcPort] = connection.ports[node.id];
-			const portForward = connection.ports[node.id];
 
-			// setup a forward streams for each new connection
-			portForward.server.on('connection', (socket) => {
-				portForward.sockets.add(socket);
-				connection.client.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, node.portForward.dstAddr || 'localhost', node.portForward.dstPort, (error, stream) => {
-					if (error) {
-						this.outputChannel.appendLine(`${parentNode.name}: ${error.message}`);
-						vscode.window.showErrorMessage(`${parentNode.name}: ${error.message}`);
-						socket.destroy();
-						return;
-					}
-					socket.pipe(stream).pipe(socket);
-				});
-				socket.on("close", () => {
-					portForward.sockets.delete(socket);
-				});
-			});
-			
-			// set port forward as offline when port forward server closes
-			portForward.server.on('close', () => {
-				if (connection.ports[node.id].status !== 'error') {
-					connection.ports[node.id].status = 'offline';
-				}
-				this.refresh();
-			});
-
-			portForward.server.on('error', (error) => {
-				if (connection.ports[node.id].status === 'connecting') {
-					connection.ports[node.id].status = 'error';
-					portForward.server.close();
-				}
-				this.outputChannel.appendLine(`${parentNode.name}: ${error.message}`);
-				vscode.window.showErrorMessage(`${parentNode.name}: ${error.message}`);
-			});
-
-			portForward.server.on('listening', () => {
-				// make sure to close port forward server after the connection facilitating the stream closes
-				connection.client.on('close', () => {
-					if (portForward.server.listening) {
-						this.closePort(node);
-					}
-				});
-
-				portForward.status = 'online';
-				this.refresh();
-			});
-
-			// listen to port
-			portForward.server.listen(node.portForward.srcPort);
+			connection.ports[node.id] = this.forwardPort(connection, node.portForward);
+			this.refresh();
+			connection.ports[node.id].server.on('close', () => { this.refresh(); });
+			connection.ports[node.id].server.on('listening', () => { this.refresh(); });
 		}
 		catch (error) {
 			this.outputChannel.appendLine(`${parentNode.name}: ${error.message}`);
 			vscode.window.showErrorMessage(`${parentNode.name}: ${error.message}`);
 		}
+	}
+
+	private forwardPortAndWait(connection: Connection, options: Partial<PortForwardConfig>): Promise<PortForward> {
+		return new Promise((resolve, reject) => {
+			const portForward = this.forwardPort(connection, options);
+			portForward.server.on('listening', () => {
+				resolve(portForward);
+			});
+			portForward.server.on('error', (error) => {
+				reject(error);
+			});
+		});
+	}
+
+	private forwardPort(connection: Connection, options: Partial<PortForwardConfig>): PortForward {
+		const portForwardSockets = new Set<Socket>();
+		const portForward: PortForward = {
+			status: 'connecting',
+			port: options.srcPort,
+			server: new Server(),
+			close: () => {
+				if (portForward.server.listening) {
+					for (const socket of portForwardSockets) {
+						socket.destroy();
+					}
+					portForward.server.close();
+				}
+			}
+		};
+
+		// setup a forward streams for each new connection
+		portForward.server.on('connection', (socket) => {
+			portForwardSockets.add(socket);
+			connection.client.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, options.dstAddr || 'localhost', options.dstPort || 22, (error, stream) => {
+				if (error) {
+					this.outputChannel.appendLine(`forwardPort: ${error.message}`);
+					vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
+					socket.destroy();
+					return;
+				}
+				socket.pipe(stream).pipe(socket);
+			});
+			socket.on("close", () => {
+				portForwardSockets.delete(socket);
+			});
+		});
+		
+		portForward.server.on('error', (error) => {
+			if (portForward.status === 'connecting') {
+				portForward.status = 'error';
+				portForward.server.close();
+			}
+			this.outputChannel.appendLine(`forwardPort: ${error.message}`);
+			vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
+		});
+
+		portForward.server.on('close', () => {
+			if (portForward.status !== 'error') {
+				portForward.status = 'offline';
+			}
+		});
+
+		// if successful in opening port. setup a event listener to close the port forward server and its sockets when the connection is closed
+		portForward.server.on('listening', () => {
+			portForward.status = 'online';
+			connection.client.on('close', () => {
+				if (portForward.server.listening) {
+					for (const socket of portForwardSockets) {
+						socket.destroy();
+					}
+					portForward.server.close();
+				}
+			});
+
+			const address = portForward.server.address();
+			if (address && typeof address !== 'string') {
+				portForward.port = address.port;
+			}
+			if (portForward.port) {
+				this.ports[portForward.port] = portForward;
+			}
+		});
+
+		// listen 
+		portForward.server.listen(options.srcPort);
+
+		return portForward;
 	}
 
 	/**
@@ -458,22 +486,54 @@ export default class ConnectionsProvider {
 	public async closePort(node: PortForwardNode): Promise<void> {
 		const portForward = this.getPortForward(node);
 		if (portForward?.status === 'online') {
-			// close any active sockets
-			for (const socket of portForward.sockets) {
-				socket.destroy();
-			}
-			portForward.server.close();
+			portForward.close();
 		}
 	}
 
 	public async openTerminal(node: ConnectionNode): Promise<void> {
 		try {
-			const connection = await this.connect(node);
-			const terminal = new SSHTerminal(connection.client, node.name);
-			connection.terminals.add(terminal);
-			terminal.onDidClose(() => {
-				connection.terminals.delete(terminal);
-			});
+			if (node.config.sshTerminalCommand) {
+				const connection = await this.connect(node);
+				const portForward = await this.forwardPortAndWait(connection, { dstPort: node.config.port });
+
+				const interpolatedCommand = node.config.sshTerminalCommand.replace('%dstPort%', portForward.port!.toString());
+
+				if (node.config.sshTerminalCommandAsProcess){
+					const process = exec(interpolatedCommand, (error, stdout, stderr) => {
+						if (error) {
+							this.outputChannel.appendLine(`${node.name}: ${error.message}`);
+							vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+						}
+						stdout && this.outputChannel.appendLine(`${node.name}: ${stdout}`);
+						stderr && this.outputChannel.appendLine(`${node.name}: ${stderr}`);
+					});
+					process.on('close', () => {
+						portForward.close();
+					});
+					// ShellExecution or ProcessExecution
+				}
+				else {
+					const terminal = vscode.window.createTerminal({
+            name: node.name, 
+            location: vscode.TerminalLocation.Editor
+          });
+					vscode.window.onDidCloseTerminal(terminal => {
+						if (terminal === terminal) {
+							portForward.close();
+						}
+					});
+					terminal.sendText(interpolatedCommand);
+					connection.terminals.add(terminal);
+				}
+			}
+			else {
+				const connection = await this.connect(node);
+				const terminal = new SSHTerminal(connection.client, node.name);
+				connection.terminals.add(terminal);
+				terminal.onDidClose(() => {
+					connection.terminals.delete(terminal);
+				});
+			}
 		}
 		catch (error) {
 			this.outputChannel.appendLine(`${node.name}: ${error.message}`);
