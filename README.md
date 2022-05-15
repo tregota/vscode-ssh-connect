@@ -1,8 +1,7 @@
 # Description
 
 Simple SSH tunneling tool.
-Uses mscdex's great pure JavaScript SSH2 client to try and make a simple PuTTY or MobaXterm alternative within vscode.
-A bit quick and dirty.
+Uses mscdex's pure JavaScript SSH2 client to try and make a simple PuTTY or MobaXterm alternative within vscode.
 
 # Example Config
 ```

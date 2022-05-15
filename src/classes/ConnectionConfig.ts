@@ -17,7 +17,8 @@ export default interface ConnectionConfig extends ConnectConfig {
 	iconPathConnected?: string
 	x11Port?: number
 	jumpServer?: string
-	sshTerminalCommand?: string
-	sshTerminalCommandAsProcess?: boolean
+	sshShellPath?: string
+	sshShellArgs?: string[]
+	sshShellAsProcess?: boolean
 	portForwards?: PortForwardConfig[]
 }

@@ -11,7 +11,7 @@
   "bugs": {
       "url": "https://github.com/tregota/vscode-ssh-connect/issues"
   },
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"engines": {
 		"vscode": "^1.67.0"
 	},
@@ -207,15 +207,24 @@
 								"type": "string",
 								"description": "Id of the connection that this connection has to be forwarded through"
 							},
-							"sshTerminalCommand": {
+							"sshShellPath": {
 								"type": "string",
-								"default": "ssh root@localhost -p %dstPort%",
-								"description": "if you want to use an external ssh terminal instead of built-in one, set this to the command to open it, %dstPort% is replaced with the local port number"
+								"default": "ssh",
+								"description": "if you want to use a ssh client other than the built-in one for shell sessions"
 							},
-							"sshTerminalCommandAsProcess": {
+							"sshShellArgs": {
+								"type": "array",
+								"description": "Arguments for sshShell, %dstPort% is replaced with a local port number forwarded to ssh port on remote",
+								"default": ["root@localhost", "-p %dstPort%"],
+								"items": {
+									"type": "string",
+									"description": "Argument for terminal"
+								}
+							},
+							"sshShellAsProcess": {
 								"type": "boolean",
 								"default": false,
-								"description": "if you have set sshTerminalCommand but you dont want to run it in a vscode terminal, set this to true"
+								"description": "If you don't want to run given sshShell from a vscode terminal"
 							},
 							"portForwards": {
 								"type": "array",
@@ -255,6 +264,15 @@
 											"description": "displays button for opening port in browser"
 										}
 									}
+								}
+							},
+							"remotePaths": {
+								"type": "array",
+								"description": "Paths to remote directories to be accessed via vscode \"Remote - SSH\"",
+								"default": [],
+								"items": {
+									"type": "string",
+									"description": "Path to remote directory"
 								}
 							},
 							"agent": {

@@ -492,14 +492,13 @@ export default class ConnectionsProvider {
 
 	public async openTerminal(node: ConnectionNode): Promise<void> {
 		try {
-			if (node.config.sshTerminalCommand) {
+			if (node.config.sshShellPath) {
 				const connection = await this.connect(node);
 				const portForward = await this.forwardPortAndWait(connection, { dstPort: node.config.port });
 
-				const interpolatedCommand = node.config.sshTerminalCommand.replace('%dstPort%', portForward.port!.toString());
-
-				if (node.config.sshTerminalCommandAsProcess){
-					const process = exec(interpolatedCommand, (error, stdout, stderr) => {
+				if (node.config.sshShellAsProcess){
+					const command = node.config.sshShellPath+' '+node.config.sshShellArgs?.map((arg) => arg.replace('%dstPort%', portForward.port!.toString())).join(' ');
+					const process = exec(command, (error, stdout, stderr) => {
 						if (error) {
 							this.outputChannel.appendLine(`${node.name}: ${error.message}`);
 							vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
@@ -514,15 +513,16 @@ export default class ConnectionsProvider {
 				}
 				else {
 					const terminal = vscode.window.createTerminal({
-            name: node.name, 
-            location: vscode.TerminalLocation.Editor
-          });
+						name: node.name, 
+						location: vscode.TerminalLocation.Editor,
+						shellPath: node.config.sshShellPath,
+						shellArgs: node.config.sshShellArgs?.map((arg) => arg.replace('%dstPort%', portForward.port!.toString())),
+					});
 					vscode.window.onDidCloseTerminal(terminal => {
 						if (terminal === terminal) {
 							portForward.close();
 						}
 					});
-					terminal.sendText(interpolatedCommand);
 					connection.terminals.add(terminal);
 				}
 			}
