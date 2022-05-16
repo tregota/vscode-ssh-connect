@@ -541,6 +541,25 @@ export default class ConnectionsProvider {
 		}
 	}
 
+	// public async openRemoteSSH(node: ConnectionNode): Promise<void> {
+	// 	try {
+		
+	// 	this doesn't work nearly good enough
+	// 	since it cannot handle login
+	// 	if only it could be done via a ssh2 shell session
+
+	// 			const connection = await this.connect(node);
+	// 			const portForward = await this.forwardPortAndWait(connection, { dstPort: node.config.port });
+	// 			vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.parse(`vscode-remote://ssh-remote+${node.config.username}@localhost:${portForward.port}/root/`), {
+	// 				forceNewWindow: true
+	// 			});
+	// 	}
+	// 	catch (error) {
+	// 		this.outputChannel.appendLine(`${node.name}: ${error.message}`);
+	// 		vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+	// 	}
+	// }
+
 	public readRemoteFile(node: ConnectionNode, filePath: string): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const connection = this.getConnection(node);
