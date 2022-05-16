@@ -178,6 +178,12 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		return this.topTreeNodes;
 	}
 
+
+	/**
+	 * TODO: figure out how the tasks extension reads it's workspace config file
+	 * https://github.com/actboy168/vscode-tasks/blob/b8d73bf2d9e02dfcd2f0b4c978a83f4bb109ff91/extension.js line 409
+	 */
+
 	private async loadNodeTree(): Promise<void> {
 		const nodeTree: TreeNode[] = [];
 		this.allTreeNodes = {};
