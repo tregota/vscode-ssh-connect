@@ -37,7 +37,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 	private allTreeNodes: { [id: string]: TreeNode } = {};
 	private topTreeNodes: TreeNode[] = [];
-	private treeNodesLastUpdate: Date = new Date('1970-01-01');
 	private configRefresh: boolean = true;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
 
@@ -89,6 +88,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	}
 
 	public getTreeItem(node: TreeNode): vscode.TreeItem {
+		let label: string | vscode.TreeItemLabel = node.name;
 		let icon = 'question';
 		let iconPath;
 		let color;
@@ -109,7 +109,14 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
+						const activeEditor = vscode.window.activeTextEditor;
+						if (activeEditor && activeEditor.document.fileName.endsWith('.sshc')) {
+							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-focus.svg');
+							label = <vscode.TreeItemLabel>{ label, highlights: [[0, label.length]] };
+						}
+						else {
+							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
+						}
 						break;
 					default:
 						iconPath = iconPath || this.context.asAbsolutePath('media/server-offline.svg');
@@ -157,13 +164,15 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			const folderNode = <FolderNode>node;
 			iconPath = folderNode.config.iconPath || this.context.asAbsolutePath('media/folder.svg');
 		}
+	
 
 		return {
-			label: node.name,
+			label,
 			contextValue: status ? `${node.type}${subtype}.${status}` : node.type,
 			collapsibleState,
 			iconPath: iconPath || new vscode.ThemeIcon(icon, color),
-			description
+			description,
+			// command: node.type === 'connection' ? { title: 'connect', command: 'ssh-connect.connect', arguments: [node] } : undefined,
 		};
 	}
 
@@ -171,7 +180,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		if (node) {
 			return node.children;
 		}
-		else if (this.configRefresh || this.treeNodesLastUpdate.getTime() + 5000 < new Date().getTime()) {
+		else if (this.configRefresh) {
 			await this.loadNodeTree();
 			this.configRefresh = false;
 		}

@@ -2,11 +2,22 @@
 
 import * as vscode from 'vscode';
 import ConnectionsProvider from './classes/ConnectionsProvider';
+import { NotebookController } from './classes/NotebookController';
+import { NotebookSerializer } from './classes/NotebookSerializer';
 import SSHConnectProvider, { ConnectionNode, PortForwardNode } from './classes/SSHConnectProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
 	try {
 		const outputChannel = vscode.window.createOutputChannel("SSH Connect");
+
+		context.subscriptions.push(new NotebookController());
+		context.subscriptions.push(vscode.workspace.registerNotebookSerializer('sshconnect-notebook', new NotebookSerializer(), {
+			transientOutputs: false,
+			transientCellMetadata: {
+				inputCollapsed: true,
+				outputCollapsed: true,
+			}
+		}));
 
 		const connectionsProvider = new ConnectionsProvider(outputChannel);
 		const sshConnectProvider = new SSHConnectProvider(context, connectionsProvider);
