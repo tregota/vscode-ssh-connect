@@ -57,6 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		vscode.commands.registerCommand('ssh-connect.refresh', () => sshConnectProvider.fullRefresh());
 		vscode.commands.registerCommand('ssh-connect.openLink', (node: PortForwardNode) => sshConnectProvider.openLink(node));
+		vscode.commands.registerCommand('ssh-connect.setScriptTarget', (targetPath: string) => sshConnectProvider.setNotebookTarget(targetPath));
 	}
 	catch (error) {
 		console.error(error);

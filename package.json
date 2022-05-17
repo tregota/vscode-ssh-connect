@@ -39,7 +39,7 @@
       "ssh-connect": [
         {
           "id": "ssh-connect.mainview",
-          "name": "SSH Connect",
+          "name": "Hosts",
           "contextualTitle": "SSH Connect"
         }
       ]
@@ -99,6 +99,11 @@
         "command": "ssh-connect.runCommand",
         "title": "Open Link",
         "icon": "media/connect.svg"
+      },
+      {
+        "command": "ssh-connect.setScriptTarget",
+        "title": "Set Script Target",
+        "icon": "$(pass-filled)"
       }
     ],
     "menus": {

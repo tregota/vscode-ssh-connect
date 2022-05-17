@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider from './ConnectionsProvider';
 import { readFileSync } from 'fs';
+import { Client } from 'ssh2';
 
 interface TreeNode {
 	name: string
@@ -39,11 +40,23 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private topTreeNodes: TreeNode[] = [];
 	private configRefresh: boolean = true;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
+	private notebookTarget: ConnectionNode | undefined;
+	private notebookActive: boolean = false;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
 		vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
 			if (event.affectsConfiguration('ssh-connect.connections') || event.affectsConfiguration('ssh-connect.configPaths')) {
 				this.configRefresh = true;
+				this.refresh();
+			}
+		});
+		vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
+			if (editor?.document.fileName.endsWith('.sshc')) {
+				this.notebookActive = true;
+				this.refresh();
+			}
+			else if (this.notebookActive) {
+				this.notebookActive = false;
 				this.refresh();
 			}
 		});
@@ -79,6 +92,27 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			throw new Error(`${id} not found`);
 		}
 	}
+	public async setNotebookTarget(target: string): Promise<void> {
+		const node = <ConnectionNode>this.allTreeNodes[target];
+		if (node?.id) {
+			const connection = await this.connectionsProvider.getConnection(node);
+			if (connection?.status === 'online') {
+				this.notebookTarget = node;
+				this.refresh();
+			}
+		}
+	}
+	public async getNotebookTargetConnection(): Promise<Client | undefined> {
+		if (this.notebookTarget) {
+			const connection = await this.connectionsProvider.getConnection(this.notebookTarget);
+			if (connection?.status !== 'online') {
+				this.notebookTarget = undefined;
+				this.refresh();
+				return undefined;
+			}
+			return connection.client;
+		}
+	}
 
 	public openLink(node: TreeNode): void {
 		if (node.type === 'portForward') {
@@ -96,6 +130,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		let description: string | undefined;
 		let subtype = '';
 		let collapsibleState = node.children.length ? (node.children.find(c => c.type === 'connection') ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed) : vscode.TreeItemCollapsibleState.None;
+		let command: vscode.Command | undefined;
 
 		if (node.type === 'connection') {
 			const connectionNode = <ConnectionNode>node;
@@ -109,13 +144,15 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						const activeEditor = vscode.window.activeTextEditor;
-						if (activeEditor && activeEditor.document.fileName.endsWith('.sshc')) {
-							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-focus.svg');
-							label = <vscode.TreeItemLabel>{ label, highlights: [[0, label.length]] };
+						if (this.notebookActive && this.notebookTarget?.id === connectionNode.id) {
+							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-active.svg');
+							description = '<script target>';
 						}
 						else {
 							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
+							if (this.notebookActive) {
+								command = { title: 'connect', command: 'ssh-connect.setScriptTarget', arguments: [connectionNode.id] };
+							}
 						}
 						break;
 					default:
@@ -165,14 +202,13 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			iconPath = folderNode.config.iconPath || this.context.asAbsolutePath('media/folder.svg');
 		}
 	
-
 		return {
 			label,
 			contextValue: status ? `${node.type}${subtype}.${status}` : node.type,
 			collapsibleState,
 			iconPath: iconPath || new vscode.ThemeIcon(icon, color),
 			description,
-			// command: node.type === 'connection' ? { title: 'connect', command: 'ssh-connect.connect', arguments: [node] } : undefined,
+			command
 		};
 	}
 
