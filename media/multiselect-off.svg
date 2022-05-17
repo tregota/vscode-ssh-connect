@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 15 15"
+   version="1.1"
+   id="svg8558"
+   sodipodi:docname="multiselect-off.svg"
+   inkscape:version="1.1.1 (3bf5ae0d25, 2021-09-20)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8562" />
+  <sodipodi:namedview
+     id="namedview8560"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     inkscape:zoom="45.254834"
+     inkscape:cx="8.905126"
+     inkscape:cy="9.8221551"
+     inkscape:window-width="1633"
+     inkscape:window-height="1081"
+     inkscape:window-x="139"
+     inkscape:window-y="244"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="g8554" />
+  <g
+     stroke="none"
+     stroke-width="1"
+     fill="none"
+     fill-rule="evenodd"
+     id="g8556"
+     style="fill:#ffffff;fill-opacity:1;stroke-width:1.00002;stroke-miterlimit:4;stroke-dasharray:none"
+     transform="matrix(0.72298914,0,0,0.72298914,2.0767411,2.0775917)">
+    <g
+       transform="matrix(1.5176,0,0,1.5397,-4.1302,-3.9124)"
+       fill="#ffffff"
+       stroke-width="1"
+       id="g8554"
+       style="fill:#ffffff;fill-opacity:1;stroke-width:0.654199;stroke-miterlimit:4;stroke-dasharray:none">
+      <path
+         id="rect2141"
+         style="fill:#e2e2e2;fill-opacity:0.71370965;fill-rule:evenodd;stroke-width:0.654199"
+         d="M 2.559481,1.5078656 V 7.3048508 H 6.8904299 V 7.5820674 H 4.3128656 V 13.379053 H 10.315315 V 9.3699391 l 2.537286,-0.039701 0.04028,-5.7572847 H 8.5619305 V 1.5078656 Z m 0.8670066,0.7934633 4.168193,0.059551 v 1.212074 H 6.8904299 v 2.898286 H 3.446627 Z M 7.837994,4.5450698 v 0 l 4.208472,-0.059551 -0.04028,3.9515577 v 0 H 7.8178536 v 0 z m -2.6581218,3.9892633 1.7105577,0.01985 0.060418,0.8554563 2.4576354,-0.039701 v 3.1755036 l -4.1681931,0.01985 z"
+         sodipodi:nodetypes="ccccccccccccccccccccccccccccccccccc" />
+    </g>
+  </g>
+</svg>

@@ -51,7 +51,7 @@
         "displayName": "SSH Connect Notebook",
         "selector": [
           {
-            "filenamePattern": "*.sshc"
+            "filenamePattern": "*.sshbook"
           }
         ]
       }
@@ -96,14 +96,19 @@
         "icon": "media/openlink.svg"
       },
       {
-        "command": "ssh-connect.runCommand",
-        "title": "Open Link",
-        "icon": "media/connect.svg"
-      },
-      {
         "command": "ssh-connect.setScriptTarget",
         "title": "Set Script Target",
         "icon": "$(pass-filled)"
+      },
+      {
+        "command": "ssh-connect.enableMultiTarget",
+        "title": "Enable Multiple Script Targets",
+        "icon": "media/multiselect-off.svg"
+      },
+      {
+        "command": "ssh-connect.disableMultiTarget",
+        "title": "Disable Multiple Script Targets",
+        "icon": "media/multiselect-on.svg"
       }
     ],
     "menus": {
@@ -111,6 +116,16 @@
         {
           "command": "ssh-connect.refresh",
           "when": "view == ssh-connect.mainview",
+          "group": "navigation"
+        },
+        {
+          "command": "ssh-connect.enableMultiTarget",
+          "when": "resourceExtname == '.sshbook' && !ssh-connect.multiTarget",
+          "group": "navigation"
+        },
+        {
+          "command": "ssh-connect.disableMultiTarget",
+          "when": "resourceExtname == '.sshbook' && ssh-connect.multiTarget",
           "group": "navigation"
         }
       ],
@@ -143,11 +158,6 @@
         {
           "command": "ssh-connect.openLink",
           "when": "view == ssh-connect.mainview && viewItem == portForwardLinked.online",
-          "group": "inline@0"
-        },
-        {
-          "command": "ssh-connect.runCommand",
-          "when": "view == ssh-connect.mainview && viewItem =~ /(connection|port)Command/",
           "group": "inline@0"
         }
       ]

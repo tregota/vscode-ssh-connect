@@ -59,7 +59,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		vscode.commands.registerCommand('ssh-connect.refresh', () => sshConnectProvider.fullRefresh());
 		vscode.commands.registerCommand('ssh-connect.openLink', (node: PortForwardNode) => sshConnectProvider.openLink(node));
+
 		vscode.commands.registerCommand('ssh-connect.setScriptTarget', (targetPath: string) => sshConnectProvider.setNotebookTarget(targetPath));
+		vscode.commands.registerCommand('ssh-connect.enableMultiTarget', () => sshConnectProvider.setMultiTarget(true));
+		vscode.commands.registerCommand('ssh-connect.disableMultiTarget', () => sshConnectProvider.setMultiTarget(false));
 	}
 	catch (error) {
 		console.error(error);
