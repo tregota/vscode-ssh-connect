@@ -35,7 +35,7 @@ export class NotebookController {
   ): Promise<void> {
     const connection = await this.sshConnectProvider.getNotebookTargetConnection();
     for (let cell of cells) {
-      await this._doExecution(cell, connection);
+      await this._doExecution(cell, connection ? [connection] : undefined);
     }
 
   }
@@ -45,21 +45,26 @@ export class NotebookController {
     // maybe: https://github.com/mscdex/ssh2/issues/704
   }
 
-  private async _doExecution(cell: vscode.NotebookCell, connection: Connection | undefined): Promise<void> {
+  private async _doExecution(cell: vscode.NotebookCell, connections: Connection[] | undefined): Promise<void> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
-    if (!connection) {
+    if (!connections) {
       execution.appendOutput([
         new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in hosts view.')])
       ]);
       execution.end(false, Date.now());
       return;
     }
-    execution.appendOutput([
-      new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Running on ${connection.node.name}...`)])
-    ]);
+
+    const outputs = connections.map((c) => `Running on ${c.node.name}...\n`);
+    const refreshOutput = () => {
+      execution.replaceOutput(outputs.map((output, i) => new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(output)])));
+    };
+    refreshOutput();
+    let stillRunning = connections.length;
+
     // todo: local nodejs scripts? https://github.com/microsoft/vscode-nodebook
 
     let command = '';
@@ -74,27 +79,28 @@ export class NotebookController {
     }
 
     if (command) {
-      connection.client.exec(command, (err, stream) => {
-        if (err) {
-          execution.appendOutput([
-            new vscode.NotebookCellOutput([
-              vscode.NotebookCellOutputItem.error(err)
-            ])
-          ]);
-          return;
-        }
-        stream.on('close', () => {
-          execution.end(true, Date.now());
-        }).on('data', (data: Buffer) => {
-          execution.appendOutput([
-            new vscode.NotebookCellOutput(data.toString().split("\n").map(line => vscode.NotebookCellOutputItem.text(line)))
-          ]);
-        }).stderr.on('data', (data: Buffer) => {
-          execution.appendOutput([
-            new vscode.NotebookCellOutput([
-              vscode.NotebookCellOutputItem.text('Error: '+data.toString())
-            ])
-          ]);
+      connections.map((connection, i) => {
+        connection.client.exec(command, (err, stream) => {
+          if (err) {
+            execution.appendOutput([
+              new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.error(err)
+              ])
+            ]);
+            return;
+          }
+          stream.on('close', () => {
+            stillRunning--;
+            if (stillRunning === 0) {
+              execution.end(true, Date.now());
+            }
+          }).on('data', (data: Buffer) => {
+            outputs[i] += data.toString();
+            refreshOutput();
+          }).stderr.on('data', (data: Buffer) => {
+            outputs[i] += data.toString();
+            refreshOutput();
+          });
         });
       });
     }
