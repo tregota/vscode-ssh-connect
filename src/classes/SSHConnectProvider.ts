@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
-import ConnectionsProvider from './ConnectionsProvider';
+import ConnectionsProvider, { Connection } from './ConnectionsProvider';
 import { readFileSync } from 'fs';
 
 interface TreeNode {
@@ -37,14 +37,27 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 	private allTreeNodes: { [id: string]: TreeNode } = {};
 	private topTreeNodes: TreeNode[] = [];
-	private treeNodesLastUpdate: Date = new Date('1970-01-01');
 	private configRefresh: boolean = true;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
+	private notebookTargets: ConnectionNode[] = [];
+	private notebookActive: boolean = false;
+	private notebookMultiTarget: boolean = false;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
 		vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
 			if (event.affectsConfiguration('ssh-connect.connections') || event.affectsConfiguration('ssh-connect.configPaths')) {
 				this.configRefresh = true;
+				this.refresh();
+			}
+		});
+		this.notebookActive = vscode.window.activeTextEditor?.document.fileName.endsWith('.sshbook') || false;
+		vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
+			if (editor?.document.fileName.endsWith('.sshbook')) {
+				this.notebookActive = true;
+				this.refresh();
+			}
+			else if (this.notebookActive) {
+				this.notebookActive = false;
 				this.refresh();
 			}
 		});
@@ -80,6 +93,47 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			throw new Error(`${id} not found`);
 		}
 	}
+	public async setNotebookTarget(target: string, onlyIfActive = false): Promise<void> {
+		if (onlyIfActive && !this.notebookActive) { return; }
+		const node = <ConnectionNode>this.allTreeNodes[target];
+		if (node?.id) {
+			if (this.notebookTargets.find((t) => t.id === node.id)) {
+				this.notebookTargets = this.notebookTargets.filter((t) => t.id !== node.id);
+			}
+			else {
+				const connection = await this.connectionsProvider.getConnection(node);
+				if (connection?.status === 'online') {
+					if (this.notebookMultiTarget) {
+						this.notebookTargets.push(node);
+					}
+					else {
+						this.notebookTargets = [node];
+					}
+				}
+			}
+			this.refresh();
+		}
+	}
+	public setMultiTarget(value: boolean): void {
+		this.notebookMultiTarget = value;
+		vscode.commands.executeCommand('setContext', 'ssh-connect.multiTarget', this.notebookMultiTarget);
+		if (!this.notebookMultiTarget && this.notebookTargets.length > 0) {
+			this.notebookTargets = [];
+		}
+		this.refresh();
+	}
+	public async getNotebookTargetConnections(): Promise<Connection[]> {
+		if (this.notebookTargets.length > 0) {
+			const connections = await Promise.all(this.notebookTargets.map((node: ConnectionNode) => this.connectionsProvider.getConnection(node)));
+			const validConnections = <Connection[]>connections.filter((connection) => connection && connection.status === 'online');
+			if(validConnections.length < connections.length) {
+				this.notebookTargets = this.notebookTargets.filter((node) => validConnections.find((connection) => connection.node.id === node.id));
+				this.refresh();
+			}
+			return validConnections;
+		}
+		return [];
+	}
 
 	public openLink(node: TreeNode): void {
 		if (node.type === 'portForward') {
@@ -89,6 +143,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	}
 
 	public getTreeItem(node: TreeNode): vscode.TreeItem {
+		let label: string | vscode.TreeItemLabel = node.name;
 		let icon = 'question';
 		let iconPath;
 		let color;
@@ -96,6 +151,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		let description: string | undefined;
 		let subtype = '';
 		let collapsibleState = node.children.length ? (node.children.find(c => c.type === 'connection') ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed) : vscode.TreeItemCollapsibleState.None;
+		let command: vscode.Command | undefined;
 
 		if (node.type === 'connection') {
 			const connectionNode = <ConnectionNode>node;
@@ -109,7 +165,15 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
+						if (this.notebookActive && !!this.notebookTargets.find((node) => node.id === connectionNode.id)) {
+							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-active.svg');
+						}
+						else {
+							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
+						}
+						if(this.notebookActive) {
+							command = { title: 'connect', command: 'ssh-connect.setScriptTarget', arguments: [connectionNode.id] };
+						}
 						break;
 					default:
 						iconPath = iconPath || this.context.asAbsolutePath('media/server-offline.svg');
@@ -157,13 +221,14 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			const folderNode = <FolderNode>node;
 			iconPath = folderNode.config.iconPath || this.context.asAbsolutePath('media/folder.svg');
 		}
-
+	
 		return {
-			label: node.name,
+			label,
 			contextValue: status ? `${node.type}${subtype}.${status}` : node.type,
 			collapsibleState,
 			iconPath: iconPath || new vscode.ThemeIcon(icon, color),
-			description
+			description,
+			command
 		};
 	}
 
@@ -171,7 +236,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		if (node) {
 			return node.children;
 		}
-		else if (this.configRefresh || this.treeNodesLastUpdate.getTime() + 5000 < new Date().getTime()) {
+		else if (this.configRefresh) {
 			await this.loadNodeTree();
 			this.configRefresh = false;
 		}
