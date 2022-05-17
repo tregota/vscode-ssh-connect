@@ -15,7 +15,7 @@ interface PortForward {
 	close: () => void
 }
 
-interface Connection {
+export interface Connection {
 	status: 'offline' | 'connecting' | 'online' | 'error'
 	client: Client
 	terminals: Set<SSHTerminal | vscode.Terminal>

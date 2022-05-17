@@ -1,5 +1,6 @@
 import { Client } from 'ssh2';
 import * as vscode from 'vscode';
+import { Connection } from './ConnectionsProvider';
 import SSHConnectProvider from './SSHConnectProvider';
 
 export class NotebookController {
@@ -32,15 +33,11 @@ export class NotebookController {
     _notebook: vscode.NotebookDocument,
     _controller: vscode.NotebookController
   ): Promise<void> {
-    const client = await this.sshConnectProvider.getNotebookTargetConnection();
-    if (client) {
-      for (let cell of cells) {
-        await this._doExecution(cell, client);
-      }
+    const connection = await this.sshConnectProvider.getNotebookTargetConnection();
+    for (let cell of cells) {
+      await this._doExecution(cell, connection);
     }
-    else {
-      vscode.window.showErrorMessage('No script target has been selected in Hosts view.');
-    }
+
   }
 
   private async _stopExecution(execution: vscode.NotebookCellExecution): Promise<void> {
@@ -48,12 +45,21 @@ export class NotebookController {
     // maybe: https://github.com/mscdex/ssh2/issues/704
   }
 
-  private async _doExecution(cell: vscode.NotebookCell, client: Client): Promise<void> {
+  private async _doExecution(cell: vscode.NotebookCell, connection: Connection | undefined): Promise<void> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
-
+    if (!connection) {
+      execution.appendOutput([
+        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in hosts view.')])
+      ]);
+      execution.end(false, Date.now());
+      return;
+    }
+    execution.appendOutput([
+      new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Running on ${connection.node.name}...`)])
+    ]);
     // todo: local nodejs scripts? https://github.com/microsoft/vscode-nodebook
 
     let command = '';
@@ -68,7 +74,7 @@ export class NotebookController {
     }
 
     if (command) {
-      client.exec(command, (err, stream) => {
+      connection.client.exec(command, (err, stream) => {
         if (err) {
           execution.appendOutput([
             new vscode.NotebookCellOutput([

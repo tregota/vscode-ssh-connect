@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
-import ConnectionsProvider from './ConnectionsProvider';
+import ConnectionsProvider, { Connection } from './ConnectionsProvider';
 import { readFileSync } from 'fs';
-import { Client } from 'ssh2';
 
 interface TreeNode {
 	name: string
@@ -50,6 +49,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				this.refresh();
 			}
 		});
+		this.notebookActive = vscode.window.activeTextEditor?.document.fileName.endsWith('.sshc') || false;
 		vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor?.document.fileName.endsWith('.sshc')) {
 				this.notebookActive = true;
@@ -103,7 +103,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			}
 		}
 	}
-	public async getNotebookTargetConnection(): Promise<Client | undefined> {
+	public async getNotebookTargetConnection(): Promise<Connection | undefined> {
 		if (this.notebookTarget) {
 			const connection = await this.connectionsProvider.getConnection(this.notebookTarget);
 			if (connection?.status !== 'online') {
@@ -111,7 +111,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				this.refresh();
 				return undefined;
 			}
-			return connection.client;
+			return connection;
 		}
 	}
 
