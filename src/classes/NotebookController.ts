@@ -46,7 +46,7 @@ export class NotebookController {
     execution.clearOutput();
     if (!connections.length) {
       execution.appendOutput([
-        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in hosts view.')])
+        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in SSH Connect Hosts view.')])
       ]);
       execution.end(false, Date.now());
       return;
