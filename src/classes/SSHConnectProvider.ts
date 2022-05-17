@@ -92,7 +92,8 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			throw new Error(`${id} not found`);
 		}
 	}
-	public async setNotebookTarget(target: string): Promise<void> {
+	public async setNotebookTarget(target: string, onlyIfActive = false): Promise<void> {
+		if (onlyIfActive && !this.notebookActive) { return; }
 		const node = <ConnectionNode>this.allTreeNodes[target];
 		if (node?.id) {
 			const connection = await this.connectionsProvider.getConnection(node);

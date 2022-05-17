@@ -27,9 +27,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			try {
 				if (node.constructor === Array) {
 					await sshConnectProvider.connect(node[0]);
+					await sshConnectProvider.setNotebookTarget(node[0], true);
 				}
 				else  {
 					await connectionsProvider.connect(<ConnectionNode>node);
+					await sshConnectProvider.setNotebookTarget((<ConnectionNode>node).id, true);
 				}
 			} catch (e) {
 				if (e) {
