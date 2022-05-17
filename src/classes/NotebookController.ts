@@ -45,6 +45,7 @@ export class NotebookController {
 
   private async _stopExecution(execution: vscode.NotebookCellExecution): Promise<void> {
     console.log('todo: stop it');
+    // maybe: https://github.com/mscdex/ssh2/issues/704
   }
 
   private async _doExecution(cell: vscode.NotebookCell, client: Client): Promise<void> {
@@ -52,6 +53,8 @@ export class NotebookController {
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
+
+    // todo: local nodejs scripts? https://github.com/microsoft/vscode-nodebook
 
     let command = '';
     if (cell.document.languageId === 'shellscript') {
