@@ -10,18 +10,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	try {
 		const outputChannel = vscode.window.createOutputChannel("SSH Connect");
 
-		context.subscriptions.push(new NotebookController());
-		context.subscriptions.push(vscode.workspace.registerNotebookSerializer('sshconnect-notebook', new NotebookSerializer(), {
-			transientOutputs: false,
-			transientCellMetadata: {
-				inputCollapsed: true,
-				outputCollapsed: true,
-			}
-		}));
-
 		const connectionsProvider = new ConnectionsProvider(outputChannel);
 		const sshConnectProvider = new SSHConnectProvider(context, connectionsProvider);
 		vscode.window.registerTreeDataProvider('ssh-connect.mainview', sshConnectProvider);
+
+		context.subscriptions.push(new NotebookController(sshConnectProvider));
+		context.subscriptions.push(vscode.workspace.registerNotebookSerializer('sshconnect-notebook', new NotebookSerializer(), {
+			// transientOutputs: false,
+			// transientCellMetadata: {
+			// 	inputCollapsed: true,
+			// 	outputCollapsed: true,
+			// }
+		}));
 
 		vscode.commands.registerCommand('ssh-connect.connect', async (node: ConnectionNode | string[]) => {
 			try {

@@ -1,4 +1,6 @@
+import { Client } from 'ssh2';
 import * as vscode from 'vscode';
+import SSHConnectProvider from './SSHConnectProvider';
 
 export class NotebookController {
   readonly id: string = 'sshconnect-notebook-controller';
@@ -8,7 +10,7 @@ export class NotebookController {
   private readonly _controller: vscode.NotebookController;
   private _executionOrder = 0;
 
-  constructor() {
+  constructor(private readonly sshConnectProvider: SSHConnectProvider) {
     this._controller = vscode.notebooks.createNotebookController(
       this.id,
       this.notebookType,
@@ -25,28 +27,67 @@ export class NotebookController {
 		this._controller.dispose();
 	}
 
-  private _execute(
+  private async _execute(
     cells: vscode.NotebookCell[],
     _notebook: vscode.NotebookDocument,
     _controller: vscode.NotebookController
-  ): void {
-    for (let cell of cells) {
-      this._doExecution(cell);
+  ): Promise<void> {
+    const client = await this.sshConnectProvider.getNotebookTargetConnection();
+    if (client) {
+      for (let cell of cells) {
+        await this._doExecution(cell, client);
+      }
+    }
+    else {
+      vscode.window.showErrorMessage('No script target has been selected in Hosts view.');
     }
   }
 
-  private async _doExecution(cell: vscode.NotebookCell): Promise<void> {
+  private async _stopExecution(execution: vscode.NotebookCellExecution): Promise<void> {
+    console.log('todo: stop it');
+  }
+
+  private async _doExecution(cell: vscode.NotebookCell, client: Client): Promise<void> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
+    execution.clearOutput();
 
-    /* Do some execution here; not implemented */
+    let command = '';
+    if (cell.document.languageId === 'shellscript') {
+      command = cell.document.getText();
+    }
+    else if (cell.document.languageId === 'python') {
+      command = `python -c "${cell.document.getText().replace(/(["'$`\\])/g,'\\$1')}"`;
+    }
+    else if (cell.document.languageId === 'perl') {
+      command = `perl -e "${cell.document.getText().replace(/(["'$`\\])/g,'\\$1')}"`;
+    }
 
-    execution.replaceOutput([
-      new vscode.NotebookCellOutput([
-        vscode.NotebookCellOutputItem.text('Dummy output text!')
-      ])
-    ]);
-    execution.end(true, Date.now());
+    if (command) {
+      client.exec(command, (err, stream) => {
+        if (err) {
+          execution.appendOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.error(err)
+            ])
+          ]);
+          return;
+        }
+        stream.on('close', () => {
+          execution.end(true, Date.now());
+        }).on('data', (data: Buffer) => {
+          execution.appendOutput([
+            new vscode.NotebookCellOutput(data.toString().split("\n").map(line => vscode.NotebookCellOutputItem.text(line)))
+          ]);
+        }).stderr.on('data', (data: Buffer) => {
+          execution.appendOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.text('Error: '+data.toString())
+            ])
+          ]);
+        });
+      });
+    }
   }
 }
