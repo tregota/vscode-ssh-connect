@@ -163,6 +163,12 @@
         }
       ]
     },
+    "jsonValidation": [
+      {
+        "fileMatch": "sshconnect.json",
+        "url": "./jshintrc.sshconnect.json"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "SSH Connect configuration",
@@ -295,15 +301,6 @@
                       "description": "displays button for opening port in browser"
                     }
                   }
-                }
-              },
-              "remotePaths": {
-                "type": "array",
-                "description": "Paths to remote directories to be accessed via vscode \"Remote - SSH\"",
-                "default": [],
-                "items": {
-                  "type": "string",
-                  "description": "Path to remote directory"
                 }
               },
               "agent": {

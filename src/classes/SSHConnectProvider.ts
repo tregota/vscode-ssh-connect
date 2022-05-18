@@ -24,9 +24,9 @@ export interface FolderNode extends TreeNode {
 }
 
 interface ConfigurationSource {
-	type: "file" | "sftp"
-	connection: string
-	autoConnect: boolean
+	type: "uri" | "file" | "sftp"
+	connection?: string
+	autoConnect?: boolean
 	path: string
 }
 
@@ -263,15 +263,24 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		return this.topTreeNodes;
 	}
 
-
-	/**
-	 * TODO: figure out how the tasks extension reads it's workspace config file
-	 * https://github.com/actboy168/vscode-tasks/blob/b8d73bf2d9e02dfcd2f0b4c978a83f4bb109ff91/extension.js line 409
-	 */
-
 	private async loadNodeTree(): Promise<void> {
 		const nodeTree: TreeNode[] = [];
 		this.allTreeNodes = {};
+
+    if (vscode.workspace.workspaceFolders !== undefined) {
+			for (const workspaceFolder of vscode.workspace.workspaceFolders) {
+				const configurations = await this.loadConfigsFromFile({
+					type: 'file',
+					path: vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'sshconnect.json').fsPath
+				});
+				for (const configuration of configurations) {
+					const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
+					if(node?.id) {
+						this.allTreeNodes[node.id] = node;
+					}
+				}
+			}
+		}
 
 		let vsConfigurations: ConnectionConfig[] = vscode.workspace.getConfiguration('ssh-connect').get('connections') || [];
 		for (const configuration of vsConfigurations) {
@@ -283,59 +292,61 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 		const configFiles: ConfigurationSource[] = vscode.workspace.getConfiguration('ssh-connect').get('configurations') || [];
 		for (const configurationSource of configFiles) {
-			try {
-				let json;
-				let id;
-				switch (configurationSource.type) {
-					case 'file':
-						id = `file/${configurationSource.path}`;
-						if (this.configRefresh || !(id in this.externalConfigCache)) {
-							json = readFileSync(configurationSource.path, 'utf8');
-						}
-						break;
-					case 'sftp':
-						id = `sftp/${configurationSource.connection}/${configurationSource.path}`;
-						if (this.configRefresh || !(id in this.externalConfigCache)) {
-							if (configurationSource.connection in this.allTreeNodes) {
-								const node = <ConnectionNode>this.allTreeNodes[configurationSource.connection];
-								const status = this.connectionsProvider.getConnectionStatus(node);
-								if (configurationSource.autoConnect || status === 'online') {
-									await this.connectionsProvider.connect(node);
-									json = await this.connectionsProvider.readRemoteFile(node, configurationSource.path);
-									if (status === 'offline') {
-										await this.connectionsProvider.disconnect(node);
-									}
-								}
-							}
-						}
-						break;
+			const configurations = await this.loadConfigsFromFile(configurationSource);
+			for (const configuration of configurations) {
+				const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
+				if(node?.id) {
+					this.allTreeNodes[node.id] = node;
 				}
-				if (json || id in this.externalConfigCache) {
-					let configurations;
-					if (json) {
-						try {
-							configurations = JSON.parse(json);
-							this.externalConfigCache[id] = configurations;
-						}
-						catch (e) {
-							vscode.window.showErrorMessage(`Could not parse configuration file ${configurationSource.path} - ${e.message}`);
-						}
-					}
-					else {
-						configurations = this.externalConfigCache[id];
-					}
-
-					for (const configuration of configurations) {
-						const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
-						if(node.id) {
-							this.allTreeNodes[node.id] = node;
-						}
-					}
-				}
-			} catch (error) {}
+			}
 		}
 
 		this.topTreeNodes = this.processNodeTree(nodeTree);
+	}
+
+	private async loadConfigsFromFile(configurationSource: ConfigurationSource): Promise<ConnectionConfig[]> {
+		try {
+			let json;
+			let id;
+			switch (configurationSource.type) {
+				case 'file':
+					id = `file/${configurationSource.path}`;
+					if (this.configRefresh || !(id in this.externalConfigCache)) {
+						json = readFileSync(configurationSource.path, 'utf8');
+					}
+					break;
+				case 'sftp':
+					id = `sftp/${configurationSource.connection}/${configurationSource.path}`;
+					if (configurationSource.connection && (this.configRefresh || !(id in this.externalConfigCache))) {
+						if (configurationSource.connection in this.allTreeNodes) {
+							const node = <ConnectionNode>this.allTreeNodes[configurationSource.connection];
+							const status = this.connectionsProvider.getConnectionStatus(node);
+							if (configurationSource.autoConnect || status === 'online') {
+								await this.connectionsProvider.connect(node);
+								json = await this.connectionsProvider.readRemoteFile(node, configurationSource.path);
+								if (status === 'offline') {
+									await this.connectionsProvider.disconnect(node);
+								}
+							}
+						}
+					}
+					break;
+			}
+			if (id && (json || id in this.externalConfigCache)) {
+				let configurations;
+				if (json) {
+					try {
+						configurations = JSON.parse(json);
+						this.externalConfigCache[id] = configurations;
+					}
+					catch (e) {
+						vscode.window.showErrorMessage(`Could not parse configuration file - ${e.message}`);
+					}
+				}
+				return this.externalConfigCache[id];
+			}
+		} catch (e) {}
+		return [];
 	}
 
 	private addToNodeTree(tree: TreeNode[], path: string[], config: ConnectionConfig, parent?: TreeNode): TreeNode | undefined {
