@@ -33,7 +33,7 @@ export class NotebookController {
     _notebook: vscode.NotebookDocument,
     _controller: vscode.NotebookController
   ): Promise<void> {
-    const connections = await this.sshConnectProvider.getNotebookTargetConnections();
+    const connections = await this.sshConnectProvider.getSelectedNodeConnections();
     for (let cell of cells) {
       await this._doExecution(cell, connections);
     }

@@ -3,7 +3,7 @@ import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider, { Connection } from './ConnectionsProvider';
 import { readFileSync } from 'fs';
 
-interface TreeNode {
+export interface TreeNode {
 	name: string
 	type: string
 	parent?: TreeNode
@@ -35,13 +35,13 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private _onDidChangeTreeData: vscode.EventEmitter<TreeNode | undefined | void> = new vscode.EventEmitter<TreeNode | undefined | void>();
 	readonly onDidChangeTreeData: vscode.Event<TreeNode | undefined | void> = this._onDidChangeTreeData.event;
 
+	private selectedNodes: ConnectionNode[] = [];
+	private multiSelect: boolean = false;
 	private allTreeNodes: { [id: string]: TreeNode } = {};
 	private topTreeNodes: TreeNode[] = [];
 	private configRefresh: boolean = true;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
-	private notebookTargets: ConnectionNode[] = [];
 	private notebookActive: boolean = false;
-	private notebookMultiTarget: boolean = false;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
 		vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
@@ -50,17 +50,23 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				this.refresh();
 			}
 		});
+
 		this.notebookActive = vscode.window.activeTextEditor?.document.fileName.endsWith('.sshbook') || false;
+		vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
+
 		vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
-			if (editor?.document.fileName.endsWith('.sshbook')) {
+			if (editor?.document.fileName.endsWith('.sshbook') && !this.notebookActive) {
 				this.notebookActive = true;
+				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
 				this.refresh();
 			}
-			else if (this.notebookActive) {
+			else if (!editor?.document.fileName.endsWith('.sshbook') && this.notebookActive) {
 				this.notebookActive = false;
+				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
 				this.refresh();
 			}
 		});
+
 		connectionsProvider.onDidChange(() => {
 			this.refresh();
 		});
@@ -74,60 +80,75 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		this.configRefresh = true;
 		this._onDidChangeTreeData.fire();
 	}
-
-	public async connect(id: string): Promise<void> {
+	public async connect(id: string): Promise<ConnectionNode> {
 		const node = <ConnectionNode>this.allTreeNodes[id];
 		if (node?.id) {
 			await this.connectionsProvider.connect(node);
+			return node;
 		}
 		else {
 			throw new Error(`${id} not found`);
 		}
 	}
-	public async disconnect(id: string): Promise<void> {
+	public async disconnect(id: string): Promise<ConnectionNode> {
 		const node = <ConnectionNode>this.allTreeNodes[id];
 		if (node?.id) {
 			await this.connectionsProvider.disconnect(node);
+			return node;
 		}
 		else {
 			throw new Error(`${id} not found`);
 		}
 	}
-	public async setNotebookTarget(target: string, onlyIfActive = false): Promise<void> {
-		if (onlyIfActive && !this.notebookActive) { return; }
-		const node = <ConnectionNode>this.allTreeNodes[target];
-		if (node?.id) {
-			if (this.notebookTargets.find((t) => t.id === node.id)) {
-				this.notebookTargets = this.notebookTargets.filter((t) => t.id !== node.id);
-			}
-			else {
-				const connection = await this.connectionsProvider.getConnection(node);
-				if (connection?.status === 'online') {
-					if (this.notebookMultiTarget) {
-						this.notebookTargets.push(node);
-					}
-					else {
-						this.notebookTargets = [node];
+	public async selectNode(node: TreeNode): Promise<void>  {
+		try {
+			if (!this.multiSelect) {
+				if (node.type === 'connection') {
+					const connectionNode = <ConnectionNode>node;
+					const status = await this.connectionsProvider.getConnectionStatus(connectionNode);
+					if (status === 'online') {
+						this.selectedNodes = [connectionNode];
 					}
 				}
 			}
-			this.refresh();
+			else if (node.type === 'connection') {
+				const connectionNode = <ConnectionNode>node;
+				if (this.selectedNodes.find((t) => t.id === connectionNode.id)) {
+					this.selectedNodes = this.selectedNodes.filter((t) => t.id !== connectionNode.id);
+				}
+				else {
+					this.selectedNodes.push(connectionNode);
+				}
+			}
 		}
-	}
-	public setMultiTarget(value: boolean): void {
-		this.notebookMultiTarget = value;
-		vscode.commands.executeCommand('setContext', 'ssh-connect.multiTarget', this.notebookMultiTarget);
-		if (!this.notebookMultiTarget && this.notebookTargets.length > 0) {
-			this.notebookTargets = [];
+		catch (e) {
+			vscode.window.showErrorMessage(e.message);
 		}
 		this.refresh();
 	}
-	public async getNotebookTargetConnections(): Promise<Connection[]> {
-		if (this.notebookTargets.length > 0) {
-			const connections = await Promise.all(this.notebookTargets.map((node: ConnectionNode) => this.connectionsProvider.getConnection(node)));
+	public unselectNode(node: TreeNode): void  {
+		if (node.type === 'connection') {
+			const connectionNode = <ConnectionNode>node;
+			if (this.selectedNodes.find((t) => t.id === connectionNode.id)) {
+				this.selectedNodes = this.selectedNodes.filter((t) => t.id !== connectionNode.id);
+			}
+		}
+		this.refresh();
+	}
+	public setMultiSelect(value: boolean): void {
+		this.multiSelect = value;
+		vscode.commands.executeCommand('setContext', 'ssh-connect.multiSelect', this.multiSelect);
+		if (!this.multiSelect) {
+			this.selectedNodes = [];
+		}
+		this.refresh();
+	}
+	public async getSelectedNodeConnections(): Promise<Connection[]> {
+		if (this.selectedNodes.length > 0) {
+			const connections = await Promise.all(this.selectedNodes.map((node: ConnectionNode) => this.connectionsProvider.getConnection(node)));
 			const validConnections = <Connection[]>connections.filter((connection) => connection && connection.status === 'online');
 			if(validConnections.length < connections.length) {
-				this.notebookTargets = this.notebookTargets.filter((node) => validConnections.find((connection) => connection.node.id === node.id));
+				this.selectedNodes = this.selectedNodes.filter((node) => validConnections.find((connection) => connection.node.id === node.id));
 				this.refresh();
 			}
 			return validConnections;
@@ -151,7 +172,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		let description: string | undefined;
 		let subtype = '';
 		let collapsibleState = node.children.length ? (node.children.find(c => c.type === 'connection') ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed) : vscode.TreeItemCollapsibleState.None;
-		let command: vscode.Command | undefined;
 
 		if (node.type === 'connection') {
 			const connectionNode = <ConnectionNode>node;
@@ -165,14 +185,12 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						if (this.notebookActive && !!this.notebookTargets.find((node) => node.id === connectionNode.id)) {
+						if (this.notebookActive && !!this.selectedNodes.find((node) => node.id === connectionNode.id)) {
 							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-active.svg');
+							subtype = 'Selected';
 						}
 						else {
 							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
-						}
-						if(this.notebookActive) {
-							command = { title: 'connect', command: 'ssh-connect.setScriptTarget', arguments: [connectionNode.id] };
 						}
 						break;
 					default:
@@ -228,7 +246,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			collapsibleState,
 			iconPath: iconPath || new vscode.ThemeIcon(icon, color),
 			description,
-			command
+			command: { title: 'select', command: 'ssh-connect.selectNode', arguments: [node] }
 		};
 	}
 

@@ -97,18 +97,18 @@
         "icon": "media/openlink.svg"
       },
       {
-        "command": "ssh-connect.setScriptTarget",
-        "title": "Set Script Target",
-        "icon": "$(pass-filled)"
+        "command": "ssh-connect.selectNode",
+        "title": "Select Node",
+        "icon": "$(check)"
       },
       {
-        "command": "ssh-connect.enableMultiTarget",
-        "title": "Enable Multiple Script Targets",
+        "command": "ssh-connect.enableMultiSelect",
+        "title": "Enable Multiple Selections",
         "icon": "media/multiselect-off.svg"
       },
       {
-        "command": "ssh-connect.disableMultiTarget",
-        "title": "Disable Multiple Script Targets",
+        "command": "ssh-connect.disableMultiSelect",
+        "title": "Disable Multiple Selections",
         "icon": "media/multiselect-on.svg"
       }
     ],
@@ -120,30 +120,30 @@
           "group": "navigation"
         },
         {
-          "command": "ssh-connect.enableMultiTarget",
-          "when": "resourceExtname == '.sshbook' && !ssh-connect.multiTarget",
+          "command": "ssh-connect.enableMultiSelect",
+          "when": "view == ssh-connect.mainview && ssh-connect.notebookActive && !ssh-connect.multiSelect",
           "group": "navigation"
         },
         {
-          "command": "ssh-connect.disableMultiTarget",
-          "when": "resourceExtname == '.sshbook' && ssh-connect.multiTarget",
+          "command": "ssh-connect.disableMultiSelect",
+          "when": "view == ssh-connect.mainview && ssh-connect.notebookActive && ssh-connect.multiSelect",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "ssh-connect.connect",
-          "when": "view == ssh-connect.mainview && viewItem =~ /connection.offline/",
+          "when": "view == ssh-connect.mainview && viewItem =~ /connection[^\\.]*.offline/",
           "group": "inline@1"
         },
         {
           "command": "ssh-connect.disconnect",
-          "when": "view == ssh-connect.mainview && viewItem =~ /connection.online/",
+          "when": "view == ssh-connect.mainview && viewItem =~ /connection[^\\.]*.online/",
           "group": "inline@1"
         },
         {
           "command": "ssh-connect.openTerminal",
-          "when": "view == ssh-connect.mainview && viewItem =~ /^connection.(online|offline)/",
+          "when": "view == ssh-connect.mainview && viewItem =~ /^connection[^\\.]*.(online|offline)/",
           "group": "inline@0"
         },
         {

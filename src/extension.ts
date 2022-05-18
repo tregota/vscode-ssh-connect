@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import ConnectionsProvider from './classes/ConnectionsProvider';
 import { NotebookController } from './classes/NotebookController';
 import { NotebookSerializer } from './classes/NotebookSerializer';
-import SSHConnectProvider, { ConnectionNode, PortForwardNode } from './classes/SSHConnectProvider';
+import SSHConnectProvider, { ConnectionNode, PortForwardNode, TreeNode } from './classes/SSHConnectProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
 	try {
@@ -26,12 +26,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('ssh-connect.connect', async (node: ConnectionNode | string[]) => {
 			try {
 				if (node.constructor === Array) {
-					await sshConnectProvider.connect(node[0]);
-					await sshConnectProvider.setNotebookTarget(node[0], true);
+					const connectionNode = await sshConnectProvider.connect(node[0]);
+					await sshConnectProvider.selectNode(connectionNode);
 				}
 				else  {
 					await connectionsProvider.connect(<ConnectionNode>node);
-					await sshConnectProvider.setNotebookTarget((<ConnectionNode>node).id, true);
+					await sshConnectProvider.selectNode(<ConnectionNode>node);
 				}
 			} catch (e) {
 				if (e) {
@@ -43,10 +43,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('ssh-connect.disconnect', async (node: ConnectionNode | string[]) => {
 			try {
 				if (node.constructor === Array) {
-					await sshConnectProvider.disconnect(node[0]);
+					const connectionNode = await sshConnectProvider.disconnect(node[0]);
+					sshConnectProvider.unselectNode(connectionNode);
 				}
 				else {
 					await connectionsProvider.disconnect(<ConnectionNode>node);
+					sshConnectProvider.unselectNode(<ConnectionNode>node);
 				}
 			} catch (e) {
 				outputChannel.appendLine(e.message);
@@ -60,9 +62,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('ssh-connect.refresh', () => sshConnectProvider.fullRefresh());
 		vscode.commands.registerCommand('ssh-connect.openLink', (node: PortForwardNode) => sshConnectProvider.openLink(node));
 
-		vscode.commands.registerCommand('ssh-connect.setScriptTarget', (targetPath: string) => sshConnectProvider.setNotebookTarget(targetPath));
-		vscode.commands.registerCommand('ssh-connect.enableMultiTarget', () => sshConnectProvider.setMultiTarget(true));
-		vscode.commands.registerCommand('ssh-connect.disableMultiTarget', () => sshConnectProvider.setMultiTarget(false));
+		vscode.commands.registerCommand('ssh-connect.selectNode', (node: TreeNode) => sshConnectProvider.selectNode(node));
+		vscode.commands.registerCommand('ssh-connect.enableMultiSelect', () => sshConnectProvider.setMultiSelect(true));
+		vscode.commands.registerCommand('ssh-connect.disableMultiSelect', () => sshConnectProvider.setMultiSelect(false));
 	}
 	catch (error) {
 		console.error(error);
