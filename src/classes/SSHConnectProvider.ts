@@ -58,11 +58,13 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			if (editor?.document.fileName.endsWith('.sshbook') && !this.notebookActive) {
 				this.notebookActive = true;
 				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
+				this.selectedNodes = [];
 				this.refresh();
 			}
 			else if (!editor?.document.fileName.endsWith('.sshbook') && this.notebookActive) {
 				this.notebookActive = false;
 				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
+				this.selectedNodes = [];
 				this.refresh();
 			}
 		});
