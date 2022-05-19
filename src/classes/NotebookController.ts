@@ -92,7 +92,7 @@ export class NotebookController {
       }
       else {
         execution.appendOutput([
-          new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('Plaintext needs shebang to tell which interpreter to call, script will be added as string argument')])
+          new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('Plaintext needs shebang to tell which interpreter to call, escaped script string will be added as last argument')])
         ]);
         execution.end(false, Date.now());
         return Promise.reject();
@@ -122,7 +122,7 @@ export class NotebookController {
     if (command) {
       const promises = connections.map((connection, i) => {
         return new Promise<Connection>((resolve, reject) => {
-          connection.client.exec(command, (err, stream) => {
+          connection.client.exec(command, { pty: true }, (err, stream) => {
             if (err) {
               outputs[i] += err.message;
               refreshOutput();
@@ -139,7 +139,8 @@ export class NotebookController {
                 resolve(connection);
               }
             }).on('data', (data: Buffer) => {
-              outputs[i] += data.toString();
+              // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
+              outputs[i] += data.toString().replace(/\n/g, '');
               refreshOutput();
             }).stderr.on('data', (data: Buffer) => {
               outputs[i] += data.toString();
