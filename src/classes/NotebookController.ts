@@ -18,7 +18,7 @@ export class NotebookController {
       this.label
     );
 
-    this._controller.supportedLanguages = ['shellscript', 'python', 'perl'];
+    this._controller.supportedLanguages = ['shellscript', 'python', 'perl', 'javascript'];
     this._controller.supportsExecutionOrder = true;
 		this._controller.description = 'A notebook for running scripts on remote host.';
     this._controller.executeHandler = this._execute.bind(this);
@@ -50,7 +50,7 @@ export class NotebookController {
       }
     }
     catch (e) {
-      vscode.window.showInformationMessage(`Execution interupted: ${e.message}`);
+      e && vscode.window.showInformationMessage(`Execution interupted: ${e.message}`);
     }
   }
 
@@ -82,10 +82,13 @@ export class NotebookController {
       command = cell.document.getText();
     }
     else if (cell.document.languageId === 'python') {
-      command = `python -c "${cell.document.getText().replace(/(["'$`\\])/g,'\\$1')}"`;
+      command = `python -c "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
     }
     else if (cell.document.languageId === 'perl') {
-      command = `perl -e "${cell.document.getText().replace(/(["'$`\\])/g,'\\$1')}"`;
+      command = `perl -e "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
+    }
+    else if (cell.document.languageId === 'javascript') {
+      command = `node -e "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
     }
 
     if (command) {
