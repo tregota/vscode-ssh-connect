@@ -173,7 +173,7 @@
       "type": "object",
       "title": "SSH Connect configuration",
       "properties": {
-        "ssh-connect.configurations": {
+        "ssh-connect.sources": {
           "type": "array",
           "description": "Paths to external json files containg an array of SSH connection configurations, overrides vscode configured connections with same ids",
           "default": [],
@@ -205,7 +205,7 @@
             }
           }
         },
-        "ssh-connect.connections": {
+        "ssh-connect.hosts": {
           "type": "array",
           "description": "Connection configurations, see SSH2 connect method docs for more info: https://github.com/mscdex/ssh2#client-methods",
           "default": [],

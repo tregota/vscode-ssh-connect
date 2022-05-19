@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider, { Connection } from './ConnectionsProvider';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 
 export interface TreeNode {
 	name: string
@@ -266,23 +266,33 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private async loadNodeTree(): Promise<void> {
 		const nodeTree: TreeNode[] = [];
 		this.allTreeNodes = {};
+		let externalConfigSources: ConfigurationSource[] = [];
 
     if (vscode.workspace.workspaceFolders !== undefined) {
 			for (const workspaceFolder of vscode.workspace.workspaceFolders) {
-				const configurations = await this.loadConfigsFromFile({
-					type: 'file',
-					path: vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'sshconnect.json').fsPath
-				});
-				for (const configuration of configurations) {
-					const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
-					if(node?.id) {
-						this.allTreeNodes[node.id] = node;
+				const path = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'sshconnect.json').fsPath;
+				if (existsSync(path)) {
+					try {
+						const json = readFileSync(path, 'utf8');
+						const configuration = JSON.parse(json);
+						for (const connectionConfig of (configuration.hosts || [])) {
+							const node = <ConnectionNode>this.addToNodeTree(nodeTree, connectionConfig.folder?.split('/') || [], connectionConfig);
+							if(node?.id) {
+								this.allTreeNodes[node.id] = node;
+							}
+						}
+						if (configuration.sources) {
+							externalConfigSources = [...externalConfigSources, ...(<ConfigurationSource[]>configuration.sources || [])];
+						}
+					}
+					catch (e) {
+						vscode.window.showErrorMessage(`Could not parse configuration file - ${e.message}`);
 					}
 				}
 			}
 		}
 
-		let vsConfigurations: ConnectionConfig[] = vscode.workspace.getConfiguration('ssh-connect').get('connections') || [];
+		let vsConfigurations: ConnectionConfig[] = vscode.workspace.getConfiguration('ssh-connect').get('hosts') || [];
 		for (const configuration of vsConfigurations) {
 			const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
 			if(node?.id) {
@@ -290,8 +300,8 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			}
 		}
 
-		const configFiles: ConfigurationSource[] = vscode.workspace.getConfiguration('ssh-connect').get('configurations') || [];
-		for (const configurationSource of configFiles) {
+		externalConfigSources = [...externalConfigSources, ...(vscode.workspace.getConfiguration('ssh-connect').get<ConfigurationSource[]>('sources') || [])];
+		for (const configurationSource of externalConfigSources) {
 			const configurations = await this.loadConfigsFromFile(configurationSource);
 			for (const configuration of configurations) {
 				const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
