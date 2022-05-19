@@ -18,7 +18,7 @@ export class NotebookController {
       this.label
     );
 
-    this._controller.supportedLanguages = ['shellscript', 'python', 'perl', 'javascript', 'php'];
+    this._controller.supportedLanguages = ['shellscript', 'python', 'perl', 'javascript', 'php', 'plaintext'];
     this._controller.supportsExecutionOrder = true;
 		this._controller.description = 'A notebook for running scripts on remote host.';
     this._controller.executeHandler = this._execute.bind(this);
@@ -77,21 +77,46 @@ export class NotebookController {
 
     // todo: local nodejs scripts? https://github.com/microsoft/vscode-nodebook
 
+
+    let interpreter: string | undefined;
     let command = '';
-    if (cell.document.languageId === 'shellscript') {
-      command = cell.document.getText();
+    let rawscript = cell.document.getText();
+    if (rawscript.startsWith('#!')) {
+      const lines = rawscript.split('\n');
+      interpreter = lines.shift()?.substring(2);
+      rawscript = lines.join("\n");
+    }
+    if (cell.document.languageId === 'plaintext') {
+      if(interpreter) {
+        command = `${interpreter} "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
+      }
+      else {
+        execution.appendOutput([
+          new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('Plaintext needs shebang to tell which interpreter to call, script will be added as string argument')])
+        ]);
+        execution.end(false, Date.now());
+        return Promise.reject();
+      }
+    }
+    else if (cell.document.languageId === 'shellscript') {
+      if(interpreter) {
+        command = `${interpreter} "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
+      }
+      else {
+        command = rawscript;
+      }
     }
     else if (cell.document.languageId === 'python') {
-      command = `python -c "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
+      command = `${interpreter||'python'} -c "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
     }
     else if (cell.document.languageId === 'perl') {
-      command = `perl -e "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
+      command = `${interpreter||'perl'} -e "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
     }
     else if (cell.document.languageId === 'javascript') {
-      command = `node -e "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
+      command = `${interpreter||'node'} -e "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
     }
     else if (cell.document.languageId === 'php') {
-      command = `php -r "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
+      command = `${interpreter||'php'} -r "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
     }
 
     if (command) {
@@ -138,6 +163,7 @@ export class NotebookController {
       }
       return resolvedPromises.filter(({ status }) => status === 'fulfilled').map((p) => (<any>p).value);
     }
-    throw new Error('Invalid command');
+    execution.end(false, Date.now());
+    return Promise.reject();
   }
 }
