@@ -93,25 +93,19 @@ export class NotebookController {
         return new Promise<Connection>((resolve, reject) => {
           connection.client.exec(command, (err, stream) => {
             if (err) {
-              execution.appendOutput([
-                new vscode.NotebookCellOutput([
-                  vscode.NotebookCellOutputItem.error(err)
-                ])
-              ]);
+              outputs[i] += err.message;
+              refreshOutput();
               return reject(err);
             }
             streams.add(stream);
             
             stream.on('close', () => {
               streams.delete(stream);
-              if (streams.size === 0) {
-                execution.end(!canceled, Date.now());
-                if (canceled) {
-                  reject(new Error('canceled'));
-                }
-                else {
-                  resolve(connection);
-                }
+              if (canceled) {
+                reject(new Error('canceled'));
+              }
+              else {
+                resolve(connection);
               }
             }).on('data', (data: Buffer) => {
               outputs[i] += data.toString();
@@ -131,8 +125,13 @@ export class NotebookController {
         }
       });
       
-      return Promise.all(promises);
+      const resolvedPromises = await Promise.allSettled(promises);
+      execution.end(true, Date.now());
+      if (resolvedPromises.find(({ status }) => status === 'rejected')) {
+        throw new Error('Failure');
+      }
+      return resolvedPromises.filter(({ status }) => status === 'fulfilled').map((p) => (<any>p).value);
     }
-    return Promise.reject('Invalid command');
+    throw new Error('Invalid command');
   }
 }
