@@ -18,7 +18,7 @@ export class NotebookController {
       this.label
     );
 
-    this._controller.supportedLanguages = ['shellscript', 'python', 'perl', 'javascript'];
+    this._controller.supportedLanguages = ['shellscript', 'python', 'perl', 'javascript', 'php'];
     this._controller.supportsExecutionOrder = true;
 		this._controller.description = 'A notebook for running scripts on remote host.';
     this._controller.executeHandler = this._execute.bind(this);
@@ -89,6 +89,9 @@ export class NotebookController {
     }
     else if (cell.document.languageId === 'javascript') {
       command = `node -e "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
+    }
+    else if (cell.document.languageId === 'php') {
+      command = `php -r "${cell.document.getText().replace(/(["$`\\])/g,'\\$1')}"`;
     }
 
     if (command) {
