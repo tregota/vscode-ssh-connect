@@ -40,7 +40,7 @@ export class NotebookController {
     _controller: vscode.NotebookController
   ): Promise<void> {
     let connections = await this.sshConnectProvider.getSelectedNodeConnections();
-    let connectionsChanged = false;
+    let connectionsChangedForMulti = false;
     let outputs: ConnectionOutputs = {};
     let runAll = false;
     let runData: {[key: string]: any} = {};
@@ -50,8 +50,10 @@ export class NotebookController {
           let { newConnections, outputs: newOutputs } = await this._doLocalExecution(cell, connections, outputs, runData);
           if (newConnections) {
             connections = newConnections; 
-            connectionsChanged = true;
-            runAll = true;
+            if (cells.length > 1) {
+              connectionsChangedForMulti = true;
+              runAll = true;
+            }
           }
           outputs = newOutputs;
         }
@@ -72,7 +74,7 @@ export class NotebookController {
     catch (err) {
       vscode.window.showInformationMessage(`Execution interupted: ${err.message}`);
     }
-    if (connectionsChanged) {
+    if (connectionsChangedForMulti) {
       await this.sshConnectProvider.setMultiSelect(false);
     }
   }
