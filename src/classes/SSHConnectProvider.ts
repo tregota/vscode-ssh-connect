@@ -39,7 +39,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private multiSelect: boolean = false;
 	private allTreeNodes: { [id: string]: ConnectionNode } = {};
 	private topTreeNodes: TreeNode[] = [];
-	private configRefresh: boolean = true;
+	private configRefresh: boolean = false;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
 	private notebookActive: boolean = false;
 
@@ -72,6 +72,8 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		connectionsProvider.onDidChange(() => {
 			this.refresh();
 		});
+
+		this.loadNodeTree();
 	}
 
 	public refresh(): void {

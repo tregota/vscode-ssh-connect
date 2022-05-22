@@ -57,6 +57,16 @@
         ]
       }
     ],
+    "languages": [
+      {
+        "id": "ssh-connect.notebook",
+        "filenamePatterns": ["*.sshbook"],
+        "icon": {
+          "light": "./media/sshbook.svg",
+          "dark": "./media/sshbook.svg"
+        }
+      }
+    ],
     "commands": [
       {
         "command": "ssh-connect.refresh",
@@ -104,12 +114,12 @@
       {
         "command": "ssh-connect.enableMultiSelect",
         "title": "Enable Multiple Selections",
-        "icon": "media/multiselect-off.svg"
+        "icon": "$(check)"
       },
       {
         "command": "ssh-connect.disableMultiSelect",
         "title": "Disable Multiple Selections",
-        "icon": "media/multiselect-on.svg"
+        "icon": "$(check-all)"
       },
       {
         "command": "ssh-connect.toggleCellRunLocation",

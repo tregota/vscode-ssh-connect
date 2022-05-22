@@ -12,7 +12,7 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
 
     if (cell.document.languageId === 'javascript') {
       if (cell.metadata['runLocation'] === 'client') {
-        info.tooltip = 'previous cell\'s output for all hosts in outputs[host] (e.g. outputs["folder/server1"]), modified outputs will be available to following cells.';
+        info.tooltip = 'previous cell\'s output for all hosts in outputs[host] (e.g. outputs["folder/server1"]), modified outputs will be available to following cells in same run.';
       }
       else {
         info.tooltip = 'previous cell\'s output for host inserted at placeholder {{output}}';

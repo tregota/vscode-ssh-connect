@@ -3,6 +3,7 @@ import * as vm from 'vm';
 import { ClientChannel } from 'ssh2';
 import { Connection } from './ConnectionsProvider';
 import SSHConnectProvider from './SSHConnectProvider';
+import { KeyObject } from 'crypto';
 
 interface ConnectionOutputs {
   [key: string]: string;
@@ -42,10 +43,11 @@ export class NotebookController {
     let connectionsChanged = false;
     let outputs: ConnectionOutputs = {};
     let runAll = false;
+    let runData: {[key: string]: any} = {};
     try {
       for (let cell of cells) {
         if (cell.metadata.runLocation === 'client') {
-          let { newConnections, outputs: newOutputs } = await this._doLocalExecution(cell, connections, outputs);
+          let { newConnections, outputs: newOutputs } = await this._doLocalExecution(cell, connections, outputs, runData);
           if (newConnections) {
             connections = newConnections; 
             connectionsChanged = true;
@@ -132,7 +134,13 @@ export class NotebookController {
 
     if (rawscript) {
       const promises = connections.map((connection, i) => {
-        const command = (interpreter ? interpreter+' "' : '') + rawscript.replace('{{output}}', lastOutputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1') + (interpreter ? '"' : '');
+        let command: string;
+        if (interpreter) {
+          command = `${interpreter} "${rawscript.replace('{{output}}', lastOutputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
+        }
+        else {
+          command = rawscript.replace('{{output}}', lastOutputs[connection.node.id] || '');
+        }
         return new Promise<string>((resolve, reject) => {
           connection.client.exec(command, { pty: true }, (err, stream) => {
             if (err) {
@@ -141,7 +149,7 @@ export class NotebookController {
             }
             streams.add(stream);
             
-            stream.on('close', (code: number, signal: number) => {
+            stream.on('close', (code: number) => {
               streams.delete(stream);
               if (code !== 0) {
                 reject(new Error('exit code: ' + code));
@@ -185,7 +193,7 @@ export class NotebookController {
     throw new Error('Empty script');
   }
 
-  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[], outputs: ConnectionOutputs): Promise<{ newConnections: Connection[] | undefined, outputs: ConnectionOutputs }> {
+  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[], outputs: ConnectionOutputs, runData: {[key: string]: any}): Promise<{ newConnections: Connection[] | undefined, outputs: ConnectionOutputs }> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
@@ -200,6 +208,7 @@ export class NotebookController {
     };
 
     const context = {
+      runData,
       outputs,
       console: {
         ...console,
@@ -208,11 +217,15 @@ export class NotebookController {
       },
       sshconnect: (...hostIds: (string | RegExp)[]) => {
         newHosts = hostIds;
+      },
+      sshdisconnect: (hostId: string) => {
+        newHosts = (newHosts.length > 0 ? newHosts : connections.map(c => c.node.id)).filter(id => id !== hostId);
+        delete outputs[hostId];
       }
     };
 
-    const script = new vm.Script(execution.cell.document.getText());
     try {
+      const script = new vm.Script(execution.cell.document.getText());
       vm.createContext(context);
       script.runInContext(context, {
         filename: execution.cell.document.uri.toString(),
