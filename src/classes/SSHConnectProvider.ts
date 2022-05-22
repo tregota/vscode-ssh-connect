@@ -37,7 +37,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 	private selectedNodes: ConnectionNode[] = [];
 	private multiSelect: boolean = false;
-	private allTreeNodes: { [id: string]: TreeNode } = {};
+	private allTreeNodes: { [id: string]: ConnectionNode } = {};
 	private topTreeNodes: TreeNode[] = [];
 	private configRefresh: boolean = true;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
@@ -83,7 +83,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		this._onDidChangeTreeData.fire();
 	}
 	public async connect(id: string): Promise<ConnectionNode> {
-		const node = <ConnectionNode>this.allTreeNodes[id];
+		const node = this.allTreeNodes[id];
 		if (node?.id) {
 			await this.connectionsProvider.connect(node);
 			return node;
@@ -93,7 +93,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		}
 	}
 	public async disconnect(id: string): Promise<ConnectionNode> {
-		const node = <ConnectionNode>this.allTreeNodes[id];
+		const node = this.allTreeNodes[id];
 		if (node?.id) {
 			await this.connectionsProvider.disconnect(node);
 			return node;
@@ -102,7 +102,43 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			throw new Error(`${id} not found`);
 		}
 	}
-	public async selectNode(node: TreeNode): Promise<void>  {
+	public async connectAndSelect(...hostIds: (string | RegExp)[]): Promise<Connection[]> {
+		this.selectedNodes = [];
+		this.setMultiSelect(true);
+		this.selectedNodes = [];
+		for (const hostId of hostIds) {
+			let connectionNode: ConnectionNode | undefined;
+			if (typeof hostId === 'string') {
+				connectionNode = this.allTreeNodes[hostId];
+				if (!connectionNode?.id) {
+					throw new Error(`${hostId} not found`);
+				}
+				await this.connectionsProvider.connect(connectionNode);
+				this.selectedNodes.push(connectionNode);
+				this.refresh();
+			}
+			else {
+				for (const id in this.allTreeNodes) {
+					if (id.match(hostId)) {
+						connectionNode = this.allTreeNodes[id];
+						await this.connectionsProvider.connect(connectionNode);
+						this.selectedNodes.push(connectionNode);
+						this.refresh();
+					}
+				}
+			}
+		}
+		if (this.selectedNodes.length === 0) {
+			throw new Error('No hosts found');
+		}
+		return this.getSelectedNodeConnections();
+	}
+	public async selectNode(node: TreeNode | undefined = undefined): Promise<void>  {
+		if(node === undefined) {
+			this.selectedNodes = [];
+			this.refresh();
+			return;
+		}
 		try {
 			if (!this.multiSelect) {
 				if (node.type === 'connection') {

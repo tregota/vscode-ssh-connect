@@ -23,7 +23,7 @@
     "onCommand:ssh-connect.connect",
     "onCommand:ssh-connect.disconnect",
     "onCommand:ssh-connect.refresh",
-    "onNotebook:sshconnect-notebook"
+    "onNotebook:ssh-connect.notebook"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -47,8 +47,8 @@
     },
     "notebooks": [
       {
-        "id": "sshconnect-notebook",
-        "type": "sshconnect-notebook",
+        "id": "ssh-connect.notebook",
+        "type": "ssh-connect.notebook",
         "displayName": "SSH Connect Notebook",
         "selector": [
           {
@@ -110,6 +110,10 @@
         "command": "ssh-connect.disableMultiSelect",
         "title": "Disable Multiple Selections",
         "icon": "media/multiselect-on.svg"
+      },
+      {
+        "command": "ssh-connect.toggleCellRunLocation",
+        "title": "Toggle Cell Run Location"
       }
     ],
     "menus": {

@@ -2,6 +2,8 @@
 
 import * as vscode from 'vscode';
 import ConnectionsProvider from './classes/ConnectionsProvider';
+import { NotebookCellStatusBarItemProvider } from './classes/NotebookCellStatusBarItemProvider';
+import { NotebookCompletionProvider } from './classes/NotebookCompletionProvider';
 import { NotebookController } from './classes/NotebookController';
 import { NotebookSerializer } from './classes/NotebookSerializer';
 import SSHConnectProvider, { ConnectionNode, PortForwardNode, TreeNode } from './classes/SSHConnectProvider';
@@ -14,14 +16,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		const sshConnectProvider = new SSHConnectProvider(context, connectionsProvider);
 		vscode.window.registerTreeDataProvider('ssh-connect.mainview', sshConnectProvider);
 
-		context.subscriptions.push(new NotebookController(sshConnectProvider));
-		context.subscriptions.push(vscode.workspace.registerNotebookSerializer('sshconnect-notebook', new NotebookSerializer(), {
-			// transientOutputs: false,
-			// transientCellMetadata: {
-			// 	inputCollapsed: true,
-			// 	outputCollapsed: true,
-			// }
-		}));
+		// notebook
+		context.subscriptions.push(
+			new NotebookController(sshConnectProvider),
+			vscode.workspace.registerNotebookSerializer('ssh-connect.notebook', new NotebookSerializer()),
+			vscode.notebooks.registerNotebookCellStatusBarItemProvider('ssh-connect.notebook', new NotebookCellStatusBarItemProvider()),
+			vscode.languages.registerCompletionItemProvider('javascript', new NotebookCompletionProvider(), '.')
+		);
 
 		vscode.commands.registerCommand('ssh-connect.connect', async (node: ConnectionNode | string[]) => {
 			try {
@@ -65,6 +66,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('ssh-connect.selectNode', (node: TreeNode) => sshConnectProvider.selectNode(node));
 		vscode.commands.registerCommand('ssh-connect.enableMultiSelect', () => sshConnectProvider.setMultiSelect(true));
 		vscode.commands.registerCommand('ssh-connect.disableMultiSelect', () => sshConnectProvider.setMultiSelect(false));
+
+		vscode.commands.registerCommand('ssh-connect.toggleRunLocation', (cell: vscode.NotebookCell) => {
+			const edit = new vscode.WorkspaceEdit();
+			(<any>edit).replaceNotebookCellMetadata(cell.notebook.uri, cell.index, { ...cell.metadata, runLocation: cell.metadata.runLocation !== 'client' ? 'client' : 'server' });
+			vscode.workspace.applyEdit(edit);
+		});
 	}
 	catch (error) {
 		console.error(error);

@@ -1,11 +1,16 @@
-import { Client, ClientChannel } from 'ssh2';
 import * as vscode from 'vscode';
+import * as vm from 'vm';
+import { ClientChannel } from 'ssh2';
 import { Connection } from './ConnectionsProvider';
 import SSHConnectProvider from './SSHConnectProvider';
 
+interface ConnectionOutputs {
+  [key: string]: string;
+}
+
 export class NotebookController {
-  readonly id: string = 'sshconnect-notebook-controller';
-  readonly notebookType: string = 'sshconnect-notebook';
+  readonly id: string = 'ssh-connect.notebook-controller';
+  readonly notebookType: string = 'ssh-connect.notebook';
   readonly label: string = 'SSH Connect Notebook';
 
   private readonly _controller: vscode.NotebookController;
@@ -34,98 +39,104 @@ export class NotebookController {
     _controller: vscode.NotebookController
   ): Promise<void> {
     let connections = await this.sshConnectProvider.getSelectedNodeConnections();
+    let connectionsChanged = false;
+    let outputs: ConnectionOutputs = {};
     let runAll = false;
     try {
       for (let cell of cells) {
-        if (!runAll && cells.length > 1) {
-          const answer = await vscode.window.showInformationMessage("Are you sure you want to run multiple cells?", "Yes", "No");
-          if (answer === "Yes") {
+        if (cell.metadata.runLocation === 'client') {
+          let { newConnections, outputs: newOutputs } = await this._doLocalExecution(cell, connections, outputs);
+          if (newConnections) {
+            connections = newConnections; 
+            connectionsChanged = true;
             runAll = true;
           }
-          else {
-            break;
-          }
+          outputs = newOutputs;
         }
-        await this._doExecution(cell, connections);
+        else {
+          if (!runAll && cells.length > 1) {
+            const answer = await vscode.window.showInformationMessage("Are you sure you want to run multiple cells?", "Yes", "No");
+            if (answer === "Yes") {
+              runAll = true;
+            }
+            else {
+              break;
+            }
+          }
+          outputs = await this._doExecution(cell, connections, outputs);
+        }
       }
     }
-    catch (e) {
-      e && vscode.window.showInformationMessage(`Execution interupted: ${e.message}`);
+    catch (err) {
+      vscode.window.showInformationMessage(`Execution interupted: ${err.message}`);
+    }
+    if (connectionsChanged) {
+      await this.sshConnectProvider.setMultiSelect(false);
     }
   }
 
-  private async _doExecution(cell: vscode.NotebookCell, connections: Connection[]): Promise<Connection[]> {
+  private async _doExecution(cell: vscode.NotebookCell, connections: Connection[], lastOutputs: ConnectionOutputs): Promise<ConnectionOutputs> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
+
     if (!connections.length) {
       execution.appendOutput([
         new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in SSH Connect Hosts view, connect to a host or click on the row of one that is already connected.')])
       ]);
       execution.end(false, Date.now());
-      return Promise.reject();
+      throw new Error('No script target');
     }
 
-    const outputs = connections.map((c) => `Running on ${c.node.name}...\n`);
-    const refreshOutput = () => {
-      execution.replaceOutput(outputs.map((output, i) => new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(output)])));
+    const outputs: ConnectionOutputs = {};
+    const nameById = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
+    const print = (id: string, text: string) => {
+      outputs[id] = outputs[id] ? outputs[id] + text : text;
+      execution.replaceOutput(Object.entries(nameById).map(([id, name]) => new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Running on ${name}...\n${outputs[id]}`)])));
     };
-    refreshOutput();
+    execution.replaceOutput(Object.entries(nameById).map(([id, name]) => new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Running on ${name}...\n`)])));
     const streams = new Set<ClientChannel>();
     let canceled = false;
 
-    // todo: local nodejs scripts? https://github.com/microsoft/vscode-nodebook
-
 
     let interpreter: string | undefined;
-    let command = '';
     let rawscript = cell.document.getText();
     if (rawscript.startsWith('#!')) {
       const lines = rawscript.split('\n');
       interpreter = lines.shift()?.substring(2);
       rawscript = lines.join("\n");
     }
-    if (cell.document.languageId === 'plaintext') {
-      if(interpreter) {
-        command = `${interpreter} "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
-      }
-      else {
+
+    if (!interpreter) {
+      if (cell.document.languageId === 'plaintext') {
         execution.appendOutput([
           new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('Plaintext needs shebang to tell which interpreter to call, escaped script string will be added as last argument')])
         ]);
         execution.end(false, Date.now());
-        return Promise.reject();
+        throw new Error('Plaintext needs shebang');
       }
-    }
-    else if (cell.document.languageId === 'shellscript') {
-      if(interpreter) {
-        command = `${interpreter} "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
+      else if (cell.document.languageId === 'python') {
+        interpreter = 'python -c';
       }
-      else {
-        command = rawscript;
+      else if (cell.document.languageId === 'perl') {
+        interpreter = 'perl -e';
       }
-    }
-    else if (cell.document.languageId === 'python') {
-      command = `${interpreter||'python'} -c "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
-    }
-    else if (cell.document.languageId === 'perl') {
-      command = `${interpreter||'perl'} -e "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
-    }
-    else if (cell.document.languageId === 'javascript') {
-      command = `${interpreter||'node'} -e "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
-    }
-    else if (cell.document.languageId === 'php') {
-      command = `${interpreter||'php'} -r "${rawscript.replace(/(["$`\\])/g,'\\$1')}"`;
+      else if (cell.document.languageId === 'javascript') {
+        interpreter = 'node -e';
+      }
+      else if (cell.document.languageId === 'php') {
+        interpreter = 'php -r';
+      }
     }
 
-    if (command) {
+    if (rawscript) {
       const promises = connections.map((connection, i) => {
-        return new Promise<Connection>((resolve, reject) => {
+        const command = (interpreter ? interpreter+' "' : '') + rawscript.replace('{{output}}', lastOutputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1') + (interpreter ? '"' : '');
+        return new Promise<string>((resolve, reject) => {
           connection.client.exec(command, { pty: true }, (err, stream) => {
             if (err) {
-              outputs[i] += err.message;
-              refreshOutput();
+              print(connection.node.id, err.message);
               return reject(err);
             }
             streams.add(stream);
@@ -136,15 +147,13 @@ export class NotebookController {
                 reject(new Error('canceled'));
               }
               else {
-                resolve(connection);
+                resolve(outputs[i]);
               }
             }).on('data', (data: Buffer) => {
               // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
-              outputs[i] += data.toString().replace(/\n/g, '');
-              refreshOutput();
+              print(connection.node.id, data.toString().replace(/\n/g, ''));
             }).stderr.on('data', (data: Buffer) => {
-              outputs[i] += data.toString();
-              refreshOutput();
+              print(connection.node.id, data.toString());
             });
           });
         });
@@ -158,13 +167,79 @@ export class NotebookController {
       });
       
       const resolvedPromises = await Promise.allSettled(promises);
-      execution.end(true, Date.now());
-      if (resolvedPromises.find(({ status }) => status === 'rejected')) {
-        throw new Error('Failure');
+      const failed = resolvedPromises.find(({ status }) => status === 'rejected');
+      if (failed) {
+        execution.end(false, Date.now());
+        throw new (failed as PromiseRejectedResult).reason;
       }
-      return resolvedPromises.filter(({ status }) => status === 'fulfilled').map((p) => (<any>p).value);
+      execution.end(true, Date.now());
+      return resolvedPromises.reduce((returnedOutputs, promiseResult, idx) => ({
+        ...returnedOutputs,
+        [connections[idx].node.id]: outputs[connections[idx].node.id]
+      }), {});
     }
     execution.end(false, Date.now());
-    return Promise.reject();
+    throw new Error('Empty script');
+  }
+
+  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[], outputs: ConnectionOutputs): Promise<{ newConnections: Connection[] | undefined, outputs: ConnectionOutputs }> {
+    const execution = this._controller.createNotebookCellExecution(cell);
+    execution.executionOrder = ++this._executionOrder;
+    execution.start(Date.now()); // Keep track of elapsed time to execute cell.
+    execution.clearOutput();
+
+
+    let newHosts: (string | RegExp)[] = [];
+    let textOutput = '';
+    const print = (text: string) => {
+      textOutput += text;
+      execution.replaceOutput([new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(textOutput, 'text/html')])]);
+    };
+
+    const context = {
+      outputs,
+      console: {
+        ...console,
+        log: (...args: any[]) => print(args.join(' ')+'<br />'),
+        error: (...args: any[]) => print('<span style="color: #ff4b4b">'+args.join(' ')+'</span><br />'),
+      },
+      sshconnect: (...hostIds: (string | RegExp)[]) => {
+        newHosts = hostIds;
+      }
+    };
+
+    const script = new vm.Script(execution.cell.document.getText());
+    try {
+      vm.createContext(context);
+      script.runInContext(context, {
+        filename: execution.cell.document.uri.toString(),
+        breakOnSigint: true,
+        timeout: 1000 * 10,
+        microtaskMode: 'afterEvaluate',
+      });
+
+      const newOutput = [];
+      if (textOutput) {
+        newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(textOutput, 'text/html')]));
+      }
+      if (Object.keys(outputs).length > 0) {
+        newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.json(context.outputs)]));
+      }
+
+      execution.replaceOutput(newOutput);
+
+      const newConnections = newHosts.length > 0 ? await this.sshConnectProvider.connectAndSelect(...newHosts) : undefined;
+
+      execution.end(true, Date.now());
+      return {
+        newConnections,
+        outputs
+      };
+    } 
+    catch (error) {
+      execution.replaceOutput([new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.error(error)])]);
+      execution.end(false, Date.now());
+      throw error;
+    }
   }
 }
