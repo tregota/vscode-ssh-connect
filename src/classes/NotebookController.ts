@@ -141,9 +141,12 @@ export class NotebookController {
             }
             streams.add(stream);
             
-            stream.on('close', () => {
+            stream.on('close', (code: number, signal: number) => {
               streams.delete(stream);
-              if (canceled) {
+              if (code !== 0) {
+                reject(new Error('exit code: ' + code));
+              }
+              else if (canceled) {
                 reject(new Error('canceled'));
               }
               else {
