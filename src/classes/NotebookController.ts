@@ -94,15 +94,14 @@ export class NotebookController {
     }
 
     const outputs: ConnectionOutputs = {};
-    const nameById = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
+    const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
     const print = (id: string, text: string) => {
       outputs[id] = outputs[id] ? outputs[id] + text : text;
-      execution.replaceOutput(Object.entries(nameById).map(([id, name]) => new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Running on ${name}...\n${outputs[id]}`)])));
+      execution.replaceOutput(Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id])));
     };
-    execution.replaceOutput(Object.entries(nameById).map(([id, name]) => new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Running on ${name}...\n`)])));
+
     const streams = new Set<ClientChannel>();
     let canceled = false;
-
 
     let interpreter: string | undefined;
     let rawscript = cell.document.getText();
@@ -153,7 +152,7 @@ export class NotebookController {
             
             stream.on('close', (code: number) => {
               streams.delete(stream);
-              if (code !== 0) {
+              if (code) {
                 reject(new Error('exit code: ' + code));
               }
               else if (canceled) {
@@ -164,7 +163,7 @@ export class NotebookController {
               }
             }).on('data', (data: Buffer) => {
               // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
-              print(connection.node.id, data.toString().replace(/\n/g, ''));
+              print(connection.node.id, data.toString().replace(/\r\n/g, '\n'));
             }).stderr.on('data', (data: Buffer) => {
               print(connection.node.id, data.toString());
             });
@@ -183,7 +182,7 @@ export class NotebookController {
       const failed = resolvedPromises.find(({ status }) => status === 'rejected');
       if (failed) {
         execution.end(false, Date.now());
-        throw new (failed as PromiseRejectedResult).reason;
+        throw (failed as PromiseRejectedResult).reason;
       }
       execution.end(true, Date.now());
       return resolvedPromises.reduce((returnedOutputs, promiseResult, idx) => ({
@@ -259,5 +258,13 @@ export class NotebookController {
       execution.end(false, Date.now());
       throw error;
     }
+  }
+
+  private cssTerminal(name: string, text: string): vscode.NotebookCellOutput {
+    const html = `<div style="background-color: #151515; border-radius: 5px;">
+      <div style="padding: 4px 16px; background-color: #80aac266; color: #151515; font-weight: 500; border-top-left-radius: 5px; border-top-right-radius: 5px">${name}</div>
+      <div style="padding: 16px;">${text.replace(/\n/g,'<br />')}</div>
+    </div>`;
+    return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
   }
 }
