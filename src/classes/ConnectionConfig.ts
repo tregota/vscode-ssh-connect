@@ -5,7 +5,7 @@ export interface PortForwardConfig {
 	srcPort: number
 	dstAddr: string
 	dstPort: number
-  type: string
+  link: string
 	autoConnect?: boolean
 }
 

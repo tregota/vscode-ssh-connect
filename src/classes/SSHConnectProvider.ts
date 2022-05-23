@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider, { Connection } from './ConnectionsProvider';
 import { readFileSync, existsSync } from 'fs';
+import { exec } from 'child_process';
 
 export interface TreeNode {
 	name: string
@@ -196,10 +197,31 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		return [];
 	}
 
-	public openLink(node: TreeNode): void {
-		if (node.type === 'portForward') {
-			let portForward = (<PortForwardNode>node).portForward;
-			vscode.env.openExternal(vscode.Uri.parse(`${portForward.type}://localhost:${portForward.srcPort}`));
+	public async openLink(node: TreeNode): Promise<void> {
+		try {
+			if (node.type === 'portForward') {
+				let portForwardNode = <PortForwardNode>node;
+				await this.connectionsProvider.openPort(portForwardNode);
+				if (['http', 'https'].includes(portForwardNode.portForward.link)) {
+					vscode.env.openExternal(vscode.Uri.parse(`${portForwardNode.portForward.link}://localhost:${portForwardNode.portForward.srcPort}`));
+				}
+				else if (portForwardNode.portForward.srcPort) {
+					const command = portForwardNode.portForward.link.replace('%port%', portForwardNode.portForward.srcPort.toString());
+					const process = exec(command, (error, stdout, stderr) => {
+						if (error) {
+							vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+						}
+						stdout && vscode.window.showInformationMessage(`${node.name}: ${stdout}`);
+						stderr && vscode.window.showErrorMessage(`${node.name}: ${stderr}`);
+					});
+					// process.on('close', () => {
+					// 	portForward.close();
+					// });
+				}
+			}
+		}
+		catch (e) {
+			vscode.window.showErrorMessage(`${node.name}: ${e.message}`);
 		}
 	}
 
@@ -269,10 +291,8 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						break;
 				}
 			}
-			if (portForwardNode.portForward.type) {
-				if (['http', 'https'].includes(portForwardNode.portForward.type)) {
-					subtype = 'Linked';
-				}
+			if (!!portForwardNode.portForward.link) {
+				subtype = 'Linked';
 			}
 		}
 		else {

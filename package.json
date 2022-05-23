@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/tregota/vscode-ssh-connect/issues"
   },
-  "version": "0.3.4",
+  "version": "0.3.5",
   "engines": {
     "vscode": "^1.67.0"
   },
@@ -172,7 +172,7 @@
         },
         {
           "command": "ssh-connect.openLink",
-          "when": "view == ssh-connect.mainview && viewItem == portForwardLinked.online",
+          "when": "view == ssh-connect.mainview && viewItem =~ /portForwardLinked.(online|offline)/",
           "group": "inline@0"
         }
       ]
@@ -306,13 +306,10 @@
                       "default": false,
                       "description": "Forward port on connect"
                     },
-                    "type": {
+                    "link": {
                       "type": "string",
-                      "enum": [
-                        "https",
-                        "http"
-                      ],
-                      "description": "displays button for opening port in browser"
+                      "default": "https",
+                      "description": "protocol (http|https) or command to run on the forwarded port, %port% is replaced with the local port number"
                     }
                   }
                 }

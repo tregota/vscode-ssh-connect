@@ -509,7 +509,6 @@ export default class ConnectionsProvider {
 					process.on('close', () => {
 						portForward.close();
 					});
-					// ShellExecution or ProcessExecution
 				}
 				else {
 					const terminal = vscode.window.createTerminal({

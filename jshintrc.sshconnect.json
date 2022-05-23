@@ -120,13 +120,10 @@
                   "default": false,
                   "description": "Forward port on connect"
                 },
-                "type": {
+                "link": {
                   "type": "string",
-                  "enum": [
-                    "https",
-                    "http"
-                  ],
-                  "description": "displays button for opening port in browser"
+                  "default": "https",
+                  "description": "protocol (http|https) or command to run on the forwarded port, %port% is replaced with the local port number"
                 }
               }
             }
