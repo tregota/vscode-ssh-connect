@@ -42,11 +42,10 @@ export class NotebookController {
     let connections = await this.sshConnectProvider.getSelectedNodeConnections();
     let connectionsChangedForMulti = false;
     let runAll = false;
-    let runData: {[key: string]: any} = {};
     try {
       for (let cell of cells) {
         if (cell.metadata.runLocation === 'client') {
-          let newConnections = await this._doLocalExecution(cell, connections, runData);
+          let newConnections = await this._doLocalExecution(cell, connections);
           if (newConnections) {
             connections = newConnections; 
             if (cells.length > 1) {
@@ -91,15 +90,29 @@ export class NotebookController {
       throw new Error('No script target');
     }
 
-    let aboveOutputs: { [key: string]: string } = {};
-    if (cell.index > 0) {
-      const aboveCell = cell.notebook.cellAt(cell.index-1);
-      if (aboveCell && aboveCell.outputs.length > 0) {
-        aboveOutputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+    let outputs: { [key: string]: string } = {};
+    try {
+      if (cell.index > 0) {
+        const aboveCell = cell.notebook.cellAt(cell.index-1);
+        if (aboveCell && aboveCell.outputs.length > 0) {
+          // is it a local javascript cell?
+          if (aboveCell.outputs[aboveCell.outputs.length-1].items.length === 1 && aboveCell.outputs[aboveCell.outputs.length-1].items[0].mime === 'text/x-json') {
+            outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[aboveCell.outputs.length-1].items[0].data.toString());
+          }
+          else {
+            outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+          }
+        }
       }
     }
+    catch (e) {
+      execution.appendOutput([
+        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Error parsing output for cell at index ${cell.index-1}: ${e.message}`)])
+      ]);
+      execution.end(false, Date.now());
+      return;
+    }
 
-    const outputs: ConnectionOutputs = {};
     const errors: { [key: string]: Error } = {};
     const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
     const fontFamily: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontFamily');
@@ -160,11 +173,14 @@ export class NotebookController {
       const promises = connections.map((connection, i) => {
         let command: string;
         if (interpreter) {
-          command = `${interpreter} "${rawscript.replace('{{output}}', aboveOutputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
+          command = `${interpreter} "${rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
         }
         else {
-          command = rawscript.replace('{{output}}', aboveOutputs[connection.node.id] || '');
+          command = rawscript.replace('{{output}}', outputs[connection.node.id] || '');
         }
+
+        outputs[connection.node.id] = '';
+
         return new Promise<string>((resolve, reject) => {
           connection.client.exec(command, { pty: true }, (err, stream) => {
             if (err) {
@@ -216,18 +232,33 @@ export class NotebookController {
     throw new Error('Empty script');
   }
 
-  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[], runData: {[key: string]: any}): Promise<Connection[] | undefined> {
+  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[]): Promise<Connection[] | undefined> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
 
-    let aboveOutputs: { [key: string]: string } = {};
-    if (cell.index > 0) {
-      const aboveCell = cell.notebook.cellAt(cell.index-1);
-      if (aboveCell && aboveCell.outputs.length > 0) {
-        aboveOutputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+    let outputs: { [key: string]: string } = {};
+    try {
+      if (cell.index > 0) {
+        const aboveCell = cell.notebook.cellAt(cell.index-1);
+        if (aboveCell && aboveCell.outputs.length > 0) {
+          // is it a local javascript cell?
+          if (aboveCell.outputs[aboveCell.outputs.length-1].items.length === 1 && aboveCell.outputs[aboveCell.outputs.length-1].items[0].mime === 'text/x-json') {
+            outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[aboveCell.outputs.length-1].items[0].data.toString());
+          }
+          else {
+            outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+          }
+        }
       }
+    }
+    catch (e) {
+      execution.appendOutput([
+        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Error parsing output for cell at index ${cell.index-1}: ${e.message}`)])
+      ]);
+      execution.end(false, Date.now());
+      return;
     }
 
     let newHosts: (string | RegExp)[] = [];
@@ -238,8 +269,7 @@ export class NotebookController {
     };
 
     const context = {
-      runData,
-      outputs: aboveOutputs,
+      outputs,
       console: {
         ...console,
         log: (...args: any[]) => print(args.join(' ')+'<br />'),
@@ -250,7 +280,6 @@ export class NotebookController {
       },
       sshdisconnect: (hostId: string) => {
         newHosts = (newHosts.length > 0 ? newHosts : connections.map(c => c.node.id)).filter(id => id !== hostId);
-        delete aboveOutputs[hostId];
       }
     };
 
@@ -263,8 +292,6 @@ export class NotebookController {
         timeout: 1000 * 10,
         microtaskMode: 'afterEvaluate',
       });
-
-      console.log(context);
 
       const newOutput = [];
       if (textOutput) {
