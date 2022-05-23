@@ -41,13 +41,12 @@ export class NotebookController {
   ): Promise<void> {
     let connections = await this.sshConnectProvider.getSelectedNodeConnections();
     let connectionsChangedForMulti = false;
-    let outputs: ConnectionOutputs = {};
     let runAll = false;
     let runData: {[key: string]: any} = {};
     try {
       for (let cell of cells) {
         if (cell.metadata.runLocation === 'client') {
-          let { newConnections, outputs: newOutputs } = await this._doLocalExecution(cell, connections, outputs, runData);
+          let newConnections = await this._doLocalExecution(cell, connections, runData);
           if (newConnections) {
             connections = newConnections; 
             if (cells.length > 1) {
@@ -55,7 +54,6 @@ export class NotebookController {
               runAll = true;
             }
           }
-          outputs = newOutputs;
         }
         else {
           if (!runAll && cells.length > 1) {
@@ -67,7 +65,7 @@ export class NotebookController {
               break;
             }
           }
-          outputs = await this._doExecution(cell, connections, outputs);
+          await this._doExecution(cell, connections);
         }
       }
     }
@@ -79,7 +77,7 @@ export class NotebookController {
     }
   }
 
-  private async _doExecution(cell: vscode.NotebookCell, connections: Connection[], lastOutputs: ConnectionOutputs): Promise<ConnectionOutputs> {
+  private async _doExecution(cell: vscode.NotebookCell, connections: Connection[]): Promise<Connection[] | undefined> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
@@ -93,11 +91,36 @@ export class NotebookController {
       throw new Error('No script target');
     }
 
+    let aboveOutputs: { [key: string]: string } = {};
+    if (cell.index > 0) {
+      const aboveCell = cell.notebook.cellAt(cell.index-1);
+      if (aboveCell && aboveCell.outputs.length > 0) {
+        aboveOutputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+      }
+    }
+
     const outputs: ConnectionOutputs = {};
+    const errors: { [key: string]: Error } = {};
     const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
+    const fontFamily: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontFamily');
+
+    const renewOutputs = () => {
+      const trimmedOutputs : { [key: string]: string } = {};
+      for (const [id, text] of Object.entries(outputs)) {
+        trimmedOutputs[id] = text.trimEnd();
+      }
+
+      execution.replaceOutput([
+        new vscode.NotebookCellOutput([
+          vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+          vscode.NotebookCellOutputItem.json(trimmedOutputs)
+        ]),
+        ...Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id], fontFamily))
+      ]);
+    };
     const print = (id: string, text: string) => {
       outputs[id] = outputs[id] ? outputs[id] + text : text;
-      execution.replaceOutput(Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id])));
+      renewOutputs();
     };
 
     const streams = new Set<ClientChannel>();
@@ -137,10 +160,10 @@ export class NotebookController {
       const promises = connections.map((connection, i) => {
         let command: string;
         if (interpreter) {
-          command = `${interpreter} "${rawscript.replace('{{output}}', lastOutputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
+          command = `${interpreter} "${rawscript.replace('{{output}}', aboveOutputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
         }
         else {
-          command = rawscript.replace('{{output}}', lastOutputs[connection.node.id] || '');
+          command = rawscript.replace('{{output}}', aboveOutputs[connection.node.id] || '');
         }
         return new Promise<string>((resolve, reject) => {
           connection.client.exec(command, { pty: true }, (err, stream) => {
@@ -153,6 +176,8 @@ export class NotebookController {
             stream.on('close', (code: number) => {
               streams.delete(stream);
               if (code) {
+                errors[connection.node.id] = new Error('Code: '+code);
+                renewOutputs();
                 reject(new Error('exit code: ' + code));
               }
               else if (canceled) {
@@ -163,7 +188,7 @@ export class NotebookController {
               }
             }).on('data', (data: Buffer) => {
               // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
-              print(connection.node.id, data.toString().replace(/\r\n/g, '\n'));
+              print(connection.node.id, data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
             }).stderr.on('data', (data: Buffer) => {
               print(connection.node.id, data.toString());
             });
@@ -185,21 +210,25 @@ export class NotebookController {
         throw (failed as PromiseRejectedResult).reason;
       }
       execution.end(true, Date.now());
-      return resolvedPromises.reduce((returnedOutputs, promiseResult, idx) => ({
-        ...returnedOutputs,
-        [connections[idx].node.id]: outputs[connections[idx].node.id]
-      }), {});
+      return undefined;
     }
     execution.end(false, Date.now());
     throw new Error('Empty script');
   }
 
-  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[], outputs: ConnectionOutputs, runData: {[key: string]: any}): Promise<{ newConnections: Connection[] | undefined, outputs: ConnectionOutputs }> {
+  private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[], runData: {[key: string]: any}): Promise<Connection[] | undefined> {
     const execution = this._controller.createNotebookCellExecution(cell);
     execution.executionOrder = ++this._executionOrder;
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
 
+    let aboveOutputs: { [key: string]: string } = {};
+    if (cell.index > 0) {
+      const aboveCell = cell.notebook.cellAt(cell.index-1);
+      if (aboveCell && aboveCell.outputs.length > 0) {
+        aboveOutputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+      }
+    }
 
     let newHosts: (string | RegExp)[] = [];
     let textOutput = '';
@@ -210,7 +239,7 @@ export class NotebookController {
 
     const context = {
       runData,
-      outputs,
+      outputs: aboveOutputs,
       console: {
         ...console,
         log: (...args: any[]) => print(args.join(' ')+'<br />'),
@@ -221,7 +250,7 @@ export class NotebookController {
       },
       sshdisconnect: (hostId: string) => {
         newHosts = (newHosts.length > 0 ? newHosts : connections.map(c => c.node.id)).filter(id => id !== hostId);
-        delete outputs[hostId];
+        delete aboveOutputs[hostId];
       }
     };
 
@@ -235,23 +264,21 @@ export class NotebookController {
         microtaskMode: 'afterEvaluate',
       });
 
+      console.log(context);
+
       const newOutput = [];
       if (textOutput) {
         newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(textOutput, 'text/html')]));
       }
-      if (Object.keys(outputs).length > 0) {
+      if (Object.keys(context.outputs).length > 0) {
         newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.json(context.outputs)]));
       }
-
       execution.replaceOutput(newOutput);
 
       const newConnections = newHosts.length > 0 ? await this.sshConnectProvider.connectAndSelect(...newHosts) : undefined;
 
       execution.end(true, Date.now());
-      return {
-        newConnections,
-        outputs
-      };
+      return newConnections;
     } 
     catch (error) {
       execution.replaceOutput([new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.error(error)])]);
@@ -260,10 +287,10 @@ export class NotebookController {
     }
   }
 
-  private cssTerminal(name: string, text: string): vscode.NotebookCellOutput {
+  private cssTerminal(name: string, text: string | undefined, error: Error | undefined, fontFamily: string | undefined): vscode.NotebookCellOutput {
     const html = `<div style="background-color: #151515; border-radius: 5px;">
-      <div style="padding: 4px 16px; background-color: #80aac266; color: #151515; font-weight: 500; border-top-left-radius: 5px; border-top-right-radius: 5px">${name}</div>
-      <div style="padding: 16px;">${text.replace(/\n/g,'<br />')}</div>
+      <div style="padding: 4px 16px; background-color: ${error ? '#ed4337' : '#80aac266'}; color: #151515; font-weight: 500; border-top-left-radius: 5px; border-top-right-radius: 5px">${name}</div>
+      <div style="padding: 16px;${!fontFamily?'':'font-family: '+fontFamily}">${text ? text.replace(/\n/g,'<br />') : ''}</div>
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
   }
