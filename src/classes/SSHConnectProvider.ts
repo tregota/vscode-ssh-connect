@@ -248,15 +248,24 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						break;
 					case 'online':
 						if (this.notebookActive && !!this.selectedNodes.find((node) => node.id === connectionNode.id)) {
-							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-active.svg');
+							iconPath = connectionNode.config.iconPathConnected || {
+								dark: this.context.asAbsolutePath('media/server-active.svg'),
+								light: this.context.asAbsolutePath('media/server-active-light.svg')
+							};
 							subtype = 'Selected';
 						}
 						else {
-							iconPath = connectionNode.config.iconPathConnected || this.context.asAbsolutePath('media/server-online.svg');
+							iconPath = connectionNode.config.iconPathConnected || {
+								dark: this.context.asAbsolutePath('media/server-online.svg'),
+								light: this.context.asAbsolutePath('media/server-online-light.svg')
+							};
 						}
 						break;
 					default:
-						iconPath = iconPath || this.context.asAbsolutePath('media/server-offline.svg');
+						iconPath = iconPath || {
+							dark: this.context.asAbsolutePath('media/server-offline.svg'),
+							light: this.context.asAbsolutePath('media/server-offline-light.svg')
+						};
 						break;
 				}
 			}
