@@ -2,7 +2,7 @@ import { ConnectConfig } from 'ssh2';
 
 export interface PortForwardConfig {
 	srcAddr?: string
-	srcPort: number
+	srcPort?: number
 	dstAddr: string
 	dstPort: number
   link: string
@@ -21,4 +21,5 @@ export default interface ConnectionConfig extends ConnectConfig {
 	sshShellArgs?: string[]
 	sshShellAsProcess?: boolean
 	portForwards?: PortForwardConfig[]
+	enableDebug?: boolean
 }

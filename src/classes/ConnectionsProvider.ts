@@ -8,7 +8,7 @@ import * as keytar from 'keytar';
 import { PortForwardConfig } from './ConnectionConfig';
 import { exec } from 'child_process';
 
-interface PortForward {
+export interface PortForward {
 	status: 'offline' | 'connecting' | 'online' | 'error'
 	server: Server
 	port?: number
@@ -330,7 +330,7 @@ export default class ConnectionsProvider {
 					host: node.config.host,
 					port: node.config.port,
 					authHandler,
-					debug: (info) => this.outputChannel.appendLine(`${node.name}: ${info}`),
+					debug: node.config.enableDebug ? (info) => this.outputChannel.appendLine(`${node.name}: ${info}`) : undefined,
 					privateKey: undefined // handled by authHandler
 				});
 			}
@@ -392,7 +392,7 @@ export default class ConnectionsProvider {
 		}
 	}
 
-	private forwardPortAndWait(connection: Connection, options: Partial<PortForwardConfig>): Promise<PortForward> {
+	public forwardPortAndWait(connection: Connection, options: Partial<PortForwardConfig>): Promise<PortForward> {
 		return new Promise((resolve, reject) => {
 			const portForward = this.forwardPort(connection, options);
 			portForward.server.on('listening', () => {
@@ -492,47 +492,12 @@ export default class ConnectionsProvider {
 
 	public async openTerminal(node: ConnectionNode): Promise<void> {
 		try {
-			if (node.config.sshShellPath) {
-				const connection = await this.connect(node);
-				const portForward = await this.forwardPortAndWait(connection, { dstPort: node.config.port });
-
-				if (node.config.sshShellAsProcess){
-					const command = node.config.sshShellPath+' '+node.config.sshShellArgs?.map((arg) => arg.replace('%dstPort%', portForward.port!.toString())).join(' ');
-					const process = exec(command, (error, stdout, stderr) => {
-						if (error) {
-							this.outputChannel.appendLine(`${node.name}: ${error.message}`);
-							vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
-						}
-						stdout && this.outputChannel.appendLine(`${node.name}: ${stdout}`);
-						stderr && this.outputChannel.appendLine(`${node.name}: ${stderr}`);
-					});
-					process.on('close', () => {
-						portForward.close();
-					});
-				}
-				else {
-					const terminal = vscode.window.createTerminal({
-						name: node.name, 
-						location: vscode.TerminalLocation.Editor,
-						shellPath: node.config.sshShellPath,
-						shellArgs: node.config.sshShellArgs?.map((arg) => arg.replace('%dstPort%', portForward.port!.toString())),
-					});
-					vscode.window.onDidCloseTerminal(terminal => {
-						if (terminal === terminal) {
-							portForward.close();
-						}
-					});
-					connection.terminals.add(terminal);
-				}
-			}
-			else {
-				const connection = await this.connect(node);
-				const terminal = new SSHTerminal(connection.client, node.name);
-				connection.terminals.add(terminal);
-				terminal.onDidClose(() => {
-					connection.terminals.delete(terminal);
-				});
-			}
+			const connection = await this.connect(node);
+			const terminal = new SSHTerminal(connection.client, node.name);
+			connection.terminals.add(terminal);
+			terminal.onDidClose(() => {
+				connection.terminals.delete(terminal);
+			});
 		}
 		catch (error) {
 			this.outputChannel.appendLine(`${node.name}: ${error.message}`);

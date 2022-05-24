@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
-import ConnectionsProvider, { Connection } from './ConnectionsProvider';
+import ConnectionsProvider, { Connection, PortForward } from './ConnectionsProvider';
 import { readFileSync, existsSync } from 'fs';
 import { exec } from 'child_process';
 
@@ -197,16 +197,31 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		return [];
 	}
 
-	public async openLink(node: TreeNode): Promise<void> {
+	public async openLink(node: PortForwardNode): Promise<void> {
 		try {
-			if (node.type === 'portForward') {
-				let portForwardNode = <PortForwardNode>node;
-				await this.connectionsProvider.openPort(portForwardNode);
-				if (['http', 'https'].includes(portForwardNode.portForward.link)) {
-					vscode.env.openExternal(vscode.Uri.parse(`${portForwardNode.portForward.link}://localhost:${portForwardNode.portForward.srcPort}`));
+			if (node.type === 'portForward' && node.portForward.dstPort) {
+				let portForward: PortForward;
+				let srcPort: number;
+
+				if (node.portForward.srcPort) {
+					await this.connectionsProvider.openPort(node);
+					srcPort = node.portForward.srcPort;
 				}
-				else if (portForwardNode.portForward.srcPort) {
-					const command = portForwardNode.portForward.link.replace('%port%', portForwardNode.portForward.srcPort.toString());
+				else {
+					const connection = await this.connectionsProvider.connect(<ConnectionNode>node.parent);
+					portForward = await this.connectionsProvider.forwardPortAndWait(connection, { dstPort: node.portForward.dstPort });
+					if (!portForward.port) {
+						portForward.close();
+						throw new Error('Port forwarding failed');
+					}
+					srcPort = portForward.port;
+				}
+
+				if (['http', 'https'].includes(node.portForward.link)) {
+					vscode.env.openExternal(vscode.Uri.parse(`${node.portForward.link}://localhost:${srcPort}`));
+				}
+				else {
+					const command = node.portForward.link.replace('%port%', srcPort.toString());
 					const process = exec(command, (error, stdout, stderr) => {
 						if (error) {
 							vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
@@ -214,10 +229,13 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						stdout && vscode.window.showInformationMessage(`${node.name}: ${stdout}`);
 						stderr && vscode.window.showErrorMessage(`${node.name}: ${stderr}`);
 					});
-					// process.on('close', () => {
-					// 	portForward.close();
-					// });
+					process.on('close', () => {
+						portForward.close();
+					});
 				}
+			}
+			else {
+				throw new Error('No destination port configured');
 			}
 		}
 		catch (e) {
@@ -280,7 +298,10 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			color = new vscode.ThemeColor("list.deemphasizedForeground");
 			icon = 'circle-outline';
 
-			if (!portForwardNode.portForward.srcPort || !portForwardNode.portForward.dstPort) {
+			if (!portForwardNode.portForward.srcPort && !!portForwardNode.portForward.link) {
+				status = 'adhoc';
+			}
+			else if (!portForwardNode.portForward.srcPort || !portForwardNode.portForward.dstPort) {
 				color = new vscode.ThemeColor("list.errorForeground");
 				status = 'error';
 				description = 'bad config';
@@ -460,12 +481,12 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			// port forwards
 			if (config.portForwards) {
 				for (const portForward of config.portForwards) {
-					let name = `${portForward.srcPort}`;
+					let name = portForward.srcPort?.toString() || '';
 					if(portForward.dstAddr && !['localhost', '127.0.0.1', '::1'].includes(portForward.dstAddr)) {
-						name += ` ➝ ${portForward.dstAddr}${portForward.dstPort && portForward.dstPort !== portForward.srcPort ? `:${portForward.dstPort}` : ''}`;
+						name = `${name?name+' ':''}➝ ${portForward.dstAddr}${portForward.dstPort && portForward.dstPort !== portForward.srcPort ? `:${portForward.dstPort}` : ''}`;
 					}
 					else if (portForward.dstPort && portForward.dstPort !== portForward.srcPort) {
-						name += ` ➝ ${portForward.dstPort}`;
+						name = `${name?name+' ':''}➝ ${portForward.dstPort}`;
 					}
 
 					const portForwardNode = <PortForwardNode>{

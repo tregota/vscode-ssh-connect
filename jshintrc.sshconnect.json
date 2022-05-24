@@ -65,6 +65,11 @@
             "default": 6000,
             "description": "If set, X11 connections will be forwarded to this port"
           },
+          "enableDebug": {
+            "type": "boolean",
+            "default": false,
+            "description": "If set, debug messages will be logged to the console"
+          },
           "jumpServer": {
             "type": "string",
             "description": "Id of the connection that this connection has to be forwarded through"
@@ -73,23 +78,6 @@
             "type": "string",
             "default": "ssh",
             "description": "if you want to use a ssh client other than the built-in one for shell sessions"
-          },
-          "sshShellArgs": {
-            "type": "array",
-            "description": "Arguments for sshShell, %dstPort% is replaced with a local port number forwarded to ssh port on remote",
-            "default": [
-              "root@localhost",
-              "-p %dstPort%"
-            ],
-            "items": {
-              "type": "string",
-              "description": "Argument for terminal"
-            }
-          },
-          "sshShellAsProcess": {
-            "type": "boolean",
-            "default": false,
-            "description": "If you don't want to run given sshShell from a vscode terminal"
           },
           "portForwards": {
             "type": "array",

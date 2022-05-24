@@ -25,7 +25,7 @@ Uses mscdex's pure JavaScript SSH2 client to try and make a simple PuTTY or Moba
           "dstAddr": "10.0.0.12",
           "dstPort": 443,
           "autoConnect": false,
-          "type": "https",
+          "link": "https",
           "blabla": "Setting a port forward type will show a context button for opening the adress in e.g. a browser"
         }
       ]
