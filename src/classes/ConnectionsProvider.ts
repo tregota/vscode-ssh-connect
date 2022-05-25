@@ -109,6 +109,7 @@ export default class ConnectionsProvider {
 			const client = this.connections[node.id].client;
 			let enteredPassword: string;
 			let triedWithStoredPassword = false;
+			let neverWithStoredPassword = false;
 
 			// on successfull connection
 			client.on('ready', () => {
@@ -116,15 +117,18 @@ export default class ConnectionsProvider {
 				this.refresh();
 				resolve(this.connections[node.id]);
 				this.autoForwardPorts(node);
-				if (enteredPassword) {
+				if (enteredPassword && !neverWithStoredPassword) {
 					// if there was a stored password but the user had to enter something else
 					if (triedWithStoredPassword) {
 						keytar.deletePassword('vscode-ssh-connect', node.id);
 					}
-					vscode.window.showInformationMessage("Do you want to save the password in system keychain?", "Yes", "No").then(answer => {
+					vscode.window.showInformationMessage("Do you want to save the password in system keychain?", "Yes", "No", `Never for ${node.name}`).then(answer => {
 						if (answer === "Yes") {
 							keytar.setPassword('vscode-ssh-connect', node.id, enteredPassword);
 							vscode.window.showInformationMessage("Saved");
+						}
+						else if (answer === `Never for ${node.name}`)  {
+							keytar.setPassword('vscode-ssh-connect', node.id, '%%NEVER%%');
 						}
   				});
 				}
@@ -199,12 +203,15 @@ export default class ConnectionsProvider {
 						let storedPassword: string | null;
 						keytar.getPassword('vscode-ssh-connect', node.id).then((setStoredPassword: string | null) => storedPassword = setStoredPassword).finally(() => {
 							if (storedPassword && !triedWithStoredPassword) {
-								triedWithStoredPassword = true;
-								return callback({
-									type: 'password',
-									username: node.config.username!,
-									password: node.config.password || storedPassword
-								});
+								neverWithStoredPassword = storedPassword === '%%NEVER%%';
+								if (!neverWithStoredPassword) {
+									triedWithStoredPassword = true;
+									return callback({
+										type: 'password',
+										username: node.config.username!,
+										password: storedPassword
+									});
+								}
 							}
 							triedWithStoredPassword = false; // so it doesn't try password auth 3 times
 							const inputOptions = {
@@ -248,10 +255,11 @@ export default class ConnectionsProvider {
 							for (const prompt of prompts) {
 								const requested = prompt.prompt.replace(': ', '').toLowerCase();
 								const storedPassword = await keytar.getPassword('vscode-ssh-connect', node.id);
+								neverWithStoredPassword = storedPassword === '%%NEVER%%';
 								if (requested === "password" && node.config.password) {
 									responses.push(node.config.password);
 								}
-								else if (requested === "password" && storedPassword && !triedWithStoredPassword) {
+								else if (requested === "password" && storedPassword && !neverWithStoredPassword && !triedWithStoredPassword) {
 									triedWithStoredPassword = true;
 									responses.push(storedPassword!);
 								}
