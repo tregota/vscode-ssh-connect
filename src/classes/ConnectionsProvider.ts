@@ -6,7 +6,6 @@ import { readFileSync } from 'fs';
 import { ConnectionNode, PortForwardNode } from './SSHConnectProvider';
 import * as keytar from 'keytar';
 import { PortForwardConfig } from './ConnectionConfig';
-import { exec } from 'child_process';
 
 export interface PortForward {
 	status: 'offline' | 'connecting' | 'online' | 'error'
@@ -173,21 +172,32 @@ export default class ConnectionsProvider {
 						username: node.config.username!
 					});
 				}
-				if (methodsLeft.includes('publickey') && node.config.privateKey && !triedMethods.includes('publickey')) {
-					triedMethods.push('publickey');
-					try {
-						const key = readFileSync(node.config.privateKey);
+				console.log(methodsLeft);
+				if (methodsLeft.includes('publickey') && (node.config.privateKey || node.config.agent)) {
+					if (node.config.agent && !triedMethods.includes('agent')) {
+						triedMethods.push('agent');
 						return callback({
-							type: 'publickey',
+							type: 'agent',
 							username: node.config.username!,
-							key,
-							passphrase: node.config.passphrase
+							agent: node.config.agent
 						});
 					}
-					catch(error) {
-						this.outputChannel.appendLine(`${node.name}: privateKey error - ${error.message}`);
-						vscode.window.showErrorMessage(`${node.name}: privateKey error - ${error.message}`);
-						// continue to next method
+					else if (node.config.privateKey && !triedMethods.includes('publickey')){
+						triedMethods.push('publickey');
+						try {
+							const key = readFileSync(node.config.privateKey);
+							return callback({
+								type: 'publickey',
+								username: node.config.username!,
+								key,
+								passphrase: node.config.passphrase
+							});
+						}
+						catch(error) {
+							this.outputChannel.appendLine(`${node.name}: privateKey error - ${error.message}`);
+							vscode.window.showErrorMessage(`${node.name}: privateKey error - ${error.message}`);
+							// continue to next method
+						}
 					}
 				}
 				if (methodsLeft.includes('password') && (!triedMethods.includes('password') || triedWithStoredPassword)) {
@@ -236,14 +246,6 @@ export default class ConnectionsProvider {
 							return;
 						});
 					}
-				}
-				else if (methodsLeft.includes('agent') && node.config.agent && !triedMethods.includes('agent')) {
-					triedMethods.push('agent');
-					callback({
-						type: 'agent',
-						username: node.config.username!,
-						agent: node.config.agent
-					});
 				}
 				else if (methodsLeft.includes('keyboard-interactive') && (!triedMethods.includes('keyboard-interactive') || triedWithStoredPassword)) {
 					triedMethods.push('keyboard-interactive');

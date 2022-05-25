@@ -124,6 +124,11 @@
       {
         "command": "ssh-connect.toggleCellRunLocation",
         "title": "Toggle Cell Run Location"
+      },
+      {
+        "command": "ssh-connect.clearStoredPassword",
+        "title": "Clear Stored Password",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -174,6 +179,11 @@
           "command": "ssh-connect.openLink",
           "when": "view == ssh-connect.mainview && viewItem =~ /portForwardLinked.(online|offline|adhoc)/",
           "group": "inline@0"
+        },
+        {
+          "command": "ssh-connect.clearStoredPassword",
+          "when": "view == ssh-connect.mainview && viewItem =~ /connection[^\\.]*/",
+          "group": "context"
         }
       ]
     },

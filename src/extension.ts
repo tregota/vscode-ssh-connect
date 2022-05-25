@@ -7,6 +7,7 @@ import { NotebookCompletionProvider } from './classes/NotebookCompletionProvider
 import { NotebookController } from './classes/NotebookController';
 import { NotebookSerializer } from './classes/NotebookSerializer';
 import SSHConnectProvider, { ConnectionNode, PortForwardNode, TreeNode } from './classes/SSHConnectProvider';
+import * as keytar from 'keytar';
 
 export async function activate(context: vscode.ExtensionContext) {
 	try {
@@ -71,6 +72,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			const edit = new vscode.WorkspaceEdit();
 			(<any>edit).replaceNotebookCellMetadata(cell.notebook.uri, cell.index, { ...cell.metadata, runLocation: cell.metadata.runLocation !== 'client' ? 'client' : 'server' });
 			vscode.workspace.applyEdit(edit);
+		});
+
+		vscode.commands.registerCommand('ssh-connect.clearStoredPassword', (node: ConnectionNode) => {
+			keytar.deletePassword('vscode-ssh-connect', node.id);
 		});
 	}
 	catch (error) {
