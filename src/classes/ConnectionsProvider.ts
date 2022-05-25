@@ -74,13 +74,22 @@ export default class ConnectionsProvider {
 		}
 
 		const promise = new Promise<Connection>((resolve, reject) => {
-			this.connections[node.id] = {
-				status: 'connecting',
-				client: new Client(),
-				terminals: new Set(),
-				ports: {},
-				node
-			};
+			// reconnect or new connection?
+			if (node.id in this.connections) {
+				this.connections[node.id].status = 'connecting';
+				this.connections[node.id].client = new Client();
+				this.connections[node.id].terminals = new Set();
+				this.connections[node.id].ports = {};
+			}
+			else {
+				this.connections[node.id] = {
+					status: 'connecting',
+					client: new Client(),
+					terminals: new Set(),
+					ports: {},
+					node
+				};
+			}
 			this.refresh();
 
 			const failedToConnect = (error?: Error) => {
@@ -493,7 +502,7 @@ export default class ConnectionsProvider {
 	public async openTerminal(node: ConnectionNode): Promise<void> {
 		try {
 			const connection = await this.connect(node);
-			const terminal = new SSHTerminal(connection.client, node.name);
+			const terminal = new SSHTerminal(this, connection);
 			connection.terminals.add(terminal);
 			terminal.onDidClose(() => {
 				connection.terminals.delete(terminal);

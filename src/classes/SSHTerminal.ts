@@ -1,5 +1,6 @@
 import { window, Event, EventEmitter, Pseudoterminal, Terminal, TerminalDimensions, TerminalLocation } from 'vscode';
 import { Client, ClientChannel } from 'ssh2';
+import ConnectionsProvider, { Connection } from './ConnectionsProvider';
 
 export default class SSHTerminal implements Pseudoterminal {
 
@@ -13,8 +14,12 @@ export default class SSHTerminal implements Pseudoterminal {
 	private stream: ClientChannel | undefined;
 	public terminal: Terminal | undefined;
 
+  constructor(private readonly connectionsProvider: ConnectionsProvider, private connection : Connection) {
+    this.connect();
+	}
+
   connect() {
-    this.connection?.shell((err, stream) => {
+    this.connection.client.shell((err, stream) => {
       if (err) {
         this._onDidWrite.fire("Failed to open shell: " + err.message);
       }
@@ -36,7 +41,7 @@ export default class SSHTerminal implements Pseudoterminal {
 
         if(!this.terminal) {
           this.terminal = window.createTerminal({
-            name: this.connectionName, 
+            name: this.connection.node.name, 
             location: TerminalLocation.Editor,
             pty: this
           });
@@ -45,22 +50,23 @@ export default class SSHTerminal implements Pseudoterminal {
     });
   }
 
-  constructor(private connection : Client | undefined, private connectionName: string) {
+  async reconnect() {
+    await this.connectionsProvider.connect(this.connection.node);
     this.connect();
-    this.connection?.on('end', () => {
-      this._onDidWrite.fire('\r\nConnection closed, press C to close terminal...');
-      this.connection = undefined;
-      this.stream = undefined;
-    });
-	}
+  }
 
   handleInput(data: string): void {
     if (this.stream) {
       this.stream.write(data);
     }
-    else if (data === 'r'  && this.connection) {
+    else if (data === 'r') {
       this._onDidWrite.fire(`\r\n\r\nReconnecting...\r\n\r\n`);
-      this.connect();
+      if (this.connection.status === 'online') {
+        this.connect();
+      }
+      else {
+        this.reconnect();
+      }
     }
     else if (data === 'c') {
       this._onDidClose.fire();
