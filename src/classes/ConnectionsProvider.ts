@@ -172,7 +172,6 @@ export default class ConnectionsProvider {
 						username: node.config.username!
 					});
 				}
-				console.log(methodsLeft);
 				if (methodsLeft.includes('publickey') && (node.config.privateKey || node.config.agent)) {
 					if (node.config.privateKey && !triedMethods.includes('publickey')){
 						triedMethods.push('publickey');

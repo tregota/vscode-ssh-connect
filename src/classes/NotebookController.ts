@@ -117,13 +117,13 @@ export class NotebookController {
     const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
     const fontFamily: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontFamily');
 
-    const renewOutputs = () => {
+    const renewOutputs = async () => {
       const trimmedOutputs : { [key: string]: string } = {};
       for (const [id, text] of Object.entries(outputs)) {
         trimmedOutputs[id] = text.trimEnd();
       }
 
-      execution.replaceOutput([
+      await execution.replaceOutput([
         new vscode.NotebookCellOutput([
           vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
           vscode.NotebookCellOutputItem.json(trimmedOutputs)
@@ -220,6 +220,7 @@ export class NotebookController {
       });
       
       const resolvedPromises = await Promise.allSettled(promises);
+      await renewOutputs();
       const failed = resolvedPromises.find(({ status }) => status === 'rejected');
       if (failed) {
         execution.end(false, Date.now());
@@ -300,7 +301,7 @@ export class NotebookController {
       if (Object.keys(context.outputs).length > 0) {
         newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.json(context.outputs)]));
       }
-      execution.replaceOutput(newOutput);
+      await execution.replaceOutput(newOutput);
 
       const newConnections = newHosts.length > 0 ? await this.sshConnectProvider.connectAndSelect(...newHosts) : undefined;
 
