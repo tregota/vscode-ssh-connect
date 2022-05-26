@@ -174,15 +174,7 @@ export default class ConnectionsProvider {
 				}
 				console.log(methodsLeft);
 				if (methodsLeft.includes('publickey') && (node.config.privateKey || node.config.agent)) {
-					if (node.config.agent && !triedMethods.includes('agent')) {
-						triedMethods.push('agent');
-						return callback({
-							type: 'agent',
-							username: node.config.username!,
-							agent: node.config.agent
-						});
-					}
-					else if (node.config.privateKey && !triedMethods.includes('publickey')){
+					if (node.config.privateKey && !triedMethods.includes('publickey')){
 						triedMethods.push('publickey');
 						try {
 							const key = readFileSync(node.config.privateKey);
@@ -198,6 +190,14 @@ export default class ConnectionsProvider {
 							vscode.window.showErrorMessage(`${node.name}: privateKey error - ${error.message}`);
 							// continue to next method
 						}
+					}
+					else if (node.config.agent && !triedMethods.includes('agent')) {
+						triedMethods.push('agent');
+						return callback({
+							type: 'agent',
+							username: node.config.username!,
+							agent: node.config.agent
+						});
 					}
 				}
 				if (methodsLeft.includes('password') && (!triedMethods.includes('password') || triedWithStoredPassword)) {

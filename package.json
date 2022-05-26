@@ -314,7 +314,7 @@
               },
               "agentForward": {
                 "type": "boolean",
-                "default": "false",
+                "default": false,
                 "description": "Set to true to use openTerminal agent forwarding (auth-agent@openTerminal.com) for the life of the connection. agent must also be set to use this feature."
               },
               "algorithms": {

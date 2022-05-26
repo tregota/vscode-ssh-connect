@@ -46,7 +46,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
 		vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
-			if (event.affectsConfiguration('ssh-connect.connections') || event.affectsConfiguration('ssh-connect.configPaths')) {
+			if (event.affectsConfiguration('ssh-connect.hosts') || event.affectsConfiguration('ssh-connect.sources')) {
 				this.configRefresh = true;
 				this.refresh();
 			}
