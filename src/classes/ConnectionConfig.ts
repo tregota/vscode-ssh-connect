@@ -7,6 +7,7 @@ export interface PortForwardConfig {
 	dstPort: number
   link: string
 	autoConnect?: boolean
+	description?: string
 }
 
 export default interface ConnectionConfig extends ConnectConfig {

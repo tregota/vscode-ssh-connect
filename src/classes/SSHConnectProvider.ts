@@ -295,6 +295,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		}
 		else if (node.type === 'portForward' && node.parent) {
 			const portForwardNode = <PortForwardNode>node;
+			description = portForwardNode.portForward.description;
 			color = new vscode.ThemeColor("list.deemphasizedForeground");
 			icon = 'circle-outline';
 

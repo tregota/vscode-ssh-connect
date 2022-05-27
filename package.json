@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/tregota/vscode-ssh-connect/issues"
   },
-  "version": "0.3.6",
+  "version": "0.3.7",
   "engines": {
     "vscode": "^1.67.0"
   },
@@ -303,6 +303,10 @@
                       "type": "string",
                       "default": "https",
                       "description": "protocol (http|https) or command to run on the forwarded port, %port% is replaced with the local port number"
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "port description"
                     }
                   }
                 }
@@ -310,7 +314,7 @@
               "agent": {
                 "type": "string",
                 "default": null,
-                "description": "Path to ssh-agent's UNIX socket for ssh-agent-based user authentication. Windows users: set to 'pageant' for authenticating with Pageant or (actual) path to a cygwin \"UNIX socket\"."
+                "description": "Path to ssh-agent's UNIX socket for ssh-agent-based user authentication. Windows users can either set to a windows pipe or path to a cygwin \"UNIX socket\" or 'pageant' for authenticating with Pageant."
               },
               "agentForward": {
                 "type": "boolean",

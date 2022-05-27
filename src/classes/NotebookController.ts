@@ -3,11 +3,6 @@ import * as vm from 'vm';
 import { ClientChannel } from 'ssh2';
 import { Connection } from './ConnectionsProvider';
 import SSHConnectProvider from './SSHConnectProvider';
-import { KeyObject } from 'crypto';
-
-interface ConnectionOutputs {
-  [key: string]: string;
-}
 
 export class NotebookController {
   readonly id: string = 'ssh-connect.notebook-controller';
