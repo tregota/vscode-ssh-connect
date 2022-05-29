@@ -59,14 +59,10 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			if (editor?.document.fileName.endsWith('.sshbook') && !this.notebookActive) {
 				this.notebookActive = true;
 				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
-				this.selectedNodes = [];
-				this.refresh();
 			}
 			else if (!editor?.document.fileName.endsWith('.sshbook') && this.notebookActive) {
 				this.notebookActive = false;
 				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
-				this.selectedNodes = [];
-				this.refresh();
 			}
 		});
 
@@ -108,7 +104,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	public async connectAndSelect(...hostIds: (string | RegExp)[]): Promise<Connection[]> {
 		this.selectedNodes = [];
 		this.setMultiSelect(true);
-		this.selectedNodes = [];
 		for (const hostId of hostIds) {
 			let connectionNode: ConnectionNode | undefined;
 			if (typeof hostId === 'string') {
@@ -180,7 +175,13 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		this.multiSelect = value;
 		vscode.commands.executeCommand('setContext', 'ssh-connect.multiSelect', this.multiSelect);
 		if (!this.multiSelect) {
-			this.selectedNodes = [];
+			const onlineNodes = this.selectedNodes.filter((node) => this.connectionsProvider.getConnectionStatus(node) === 'online');
+			if (onlineNodes.length > 0) {
+				this.selectedNodes = [onlineNodes[0]];
+			}
+			else {
+				this.selectedNodes = [];
+			}
 		}
 		this.refresh();
 	}
@@ -265,7 +266,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						if (this.notebookActive && !!this.selectedNodes.find((node) => node.id === connectionNode.id)) {
+						if (!!this.selectedNodes.find((node) => node.id === connectionNode.id)) {
 							iconPath = connectionNode.config.iconPathConnected || {
 								dark: this.context.asAbsolutePath('media/server-active.svg'),
 								light: this.context.asAbsolutePath('media/server-active-light.svg')

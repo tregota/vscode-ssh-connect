@@ -28,7 +28,7 @@ export default class SSHTerminal implements Pseudoterminal {
         stream.on('close', () => {
           this.stream = undefined;
           if (this.connection) {
-            this._onDidWrite.fire('\n\nDisconnected, press R to reconnect or C to close terminal...');
+            this._onDidWrite.fire('\r\n\r\nDisconnected, press R to reconnect or C to close terminal...');
           }
         }).on('data', (data: Buffer) => {
           this._onDidWrite.fire(data.toString());
@@ -54,10 +54,10 @@ export default class SSHTerminal implements Pseudoterminal {
     try {
       await this.connectionsProvider.connect(this.connection.node);
       this.connect();
-      this._onDidWrite.fire(`\n\n`);
+      this._onDidWrite.fire(`\r\n\r\n`);
     }
     catch(error) {
-      this._onDidWrite.fire(`failed: ${error.message}\n\n`);
+      this._onDidWrite.fire(`failed: ${error.message}\r\n\r\n`);
     }
   }
 
@@ -66,10 +66,10 @@ export default class SSHTerminal implements Pseudoterminal {
       this.stream.write(data);
     }
     else if (data === 'r') {
-      this._onDidWrite.fire(`\n\nReconnecting... `);
+      this._onDidWrite.fire(`\r\nReconnecting... `);
       if (this.connection.status === 'online') {
         this.connect();
-        this._onDidWrite.fire(`\n\n`);
+        this._onDidWrite.fire(`\r\n\r\n`);
       }
       else {
         this.reconnect();
