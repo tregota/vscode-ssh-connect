@@ -65,7 +65,7 @@ export class NotebookController {
     let runAll = false;
     try {
       for (let cell of cells) {
-        if (cell.metadata.runLocation === 'client') {
+        if (cell.metadata.runLocation === 'client' && cell.document.languageId === 'javascript') {
           let newConnections = await this._doLocalExecution(cell, connections);
           if (newConnections) {
             connections = newConnections; 
@@ -196,7 +196,7 @@ export class NotebookController {
           command = `${interpreter} "${rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
         }
         else {
-          command = rawscript.replace('{{output}}', outputs[connection.node.id] || '');
+          command = rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/\r\n/g, '\n');
         }
 
         outputs[connection.node.id] = '';
@@ -338,9 +338,9 @@ export class NotebookController {
   private cssTerminal(name: string, text: string | undefined, error: Error | undefined): vscode.NotebookCellOutput {
     const windowColorVar = error ? 'var(--vscode-terminalCommandDecoration-errorBackground)' : 'var(--vscode-tab-activeBackground)';
     const headerTextColorVar = error ? 'var(--vscode-statusBarItem-errorForeground)' : 'var(--vscode-tab-activeForeground)';
-    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; border: solid 2px ${windowColorVar}">
+    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; border: solid 2px ${windowColorVar};">
       <div style="padding: 2px 16px 4px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
-      <pre style="padding: 10px 10px 3px 12px; margin: 0; max-height: 500px; overflow: scroll; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre>
+      <pre style="padding: 10px 10px 11px 12px; margin: 0; max-height: 500px; overflow: auto; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre>
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
   }

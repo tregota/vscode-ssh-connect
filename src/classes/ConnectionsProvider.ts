@@ -202,7 +202,38 @@ export default class ConnectionsProvider {
 						});
 					}
 				}
-				if (methodsLeft.includes('password') && (!triedMethods.includes('password') || triedWithStoredPassword)) {
+				
+				if (methodsLeft.includes('hostbased') && node.config.localUsername && !triedMethods.includes('hostbased')) {
+					// I'm not sure how this works and the docs and AuthHandlerResult type doesn't agree, so we'll have to see what happens if someone tries it
+					triedMethods.push('hostbased');
+					if (node.config.privateKey) {
+						try {
+							const key = readFileSync(node.config.privateKey);
+							callback(<any>{
+								type: 'hostbased',
+								username: node.config.username!,
+								key,
+								passphrase: node.config.passphrase,
+								localUsername: node.config.localUsername,
+								localHostname: node.config.localHostname
+							});
+						}
+						catch(error) {
+							this.outputChannel.appendLine(`${node.id}: hostbased error - ${error.message}`);
+							vscode.window.showErrorMessage(`${node.id}: hostbased error - ${error.message}`);
+							callback(false);
+						}
+					}
+					else {
+						callback(<any>{
+							type: 'hostbased',
+							username: node.config.username!,
+							localUsername: node.config.localUsername,
+							localHostname: node.config.localHostname
+						});
+					}
+				}
+				else if (methodsLeft.includes('password') && (!triedMethods.includes('password') || triedWithStoredPassword)) {
 					triedMethods.push('password');
 					if(node.config.password) {
 						callback({
@@ -290,36 +321,6 @@ export default class ConnectionsProvider {
 							finish(responses);
 						}
 					});
-				}
-				else if (methodsLeft.includes('hostbased') && node.config.localUsername && !triedMethods.includes('hostbased')) {
-					// I'm not sure how this works and the docs and AuthHandlerResult type doesn't agree, so we'll have to see what happens if someone tries it
-					triedMethods.push('hostbased');
-					if (node.config.privateKey) {
-						try {
-							const key = readFileSync(node.config.privateKey);
-							callback(<any>{
-								type: 'hostbased',
-								username: node.config.username!,
-								key,
-								passphrase: node.config.passphrase,
-								localUsername: node.config.localUsername,
-								localHostname: node.config.localHostname
-							});
-						}
-						catch(error) {
-							this.outputChannel.appendLine(`${node.id}: hostbased error - ${error.message}`);
-							vscode.window.showErrorMessage(`${node.id}: hostbased error - ${error.message}`);
-							callback(false);
-						}
-					}
-					else {
-						callback(<any>{
-							type: 'hostbased',
-							username: node.config.username!,
-							localUsername: node.config.localUsername,
-							localHostname: node.config.localHostname
-						});
-					}
 				}
 				else {
 					callback(false);
