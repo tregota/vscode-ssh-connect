@@ -10,7 +10,9 @@ export class NotebookController {
   readonly label: string = 'SSH Connect Notebook';
 
   private readonly _controller: vscode.NotebookController;
+	private readonly _associations = new Map<string, vscode.NotebookDocument>();
   private _executionOrder = 0;
+  private terminalCss = "";
 
   constructor(private readonly sshConnectProvider: SSHConnectProvider) {
     this._controller = vscode.notebooks.createNotebookController(
@@ -23,6 +25,30 @@ export class NotebookController {
     this._controller.supportsExecutionOrder = true;
 		this._controller.description = 'A notebook for running scripts on remote host.';
     this._controller.executeHandler = this._execute.bind(this);
+
+    this._controller.onDidChangeSelectedNotebooks(({notebook, selected}) => {
+      const docKey = notebook.uri.toString();
+      if (selected && !this._associations.has(docKey)) {
+        this._associations.set(docKey, notebook);
+        if (this._associations.size === 1) {
+          vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', true);
+          this.sshConnectProvider.notebookActive = true;
+          this.sshConnectProvider.refresh();
+        }
+      }
+      else if (!selected && this._associations.has(docKey)) {
+        this._associations.delete(docKey);
+        if (this._associations.size === 0) {
+          vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', false);
+          this.sshConnectProvider.notebookActive = false;
+          this.sshConnectProvider.refresh();
+        }
+      }
+    });
+
+    const fontFamily: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontFamily');
+    const fontSize: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontSize');
+    this.terminalCss = (!fontFamily?'':`font-family: ${fontFamily};`)+(!fontSize?'':`font-size: ${fontSize}px;`);
   }
   
   dispose(): void {
@@ -110,7 +136,6 @@ export class NotebookController {
 
     const errors: { [key: string]: Error } = {};
     const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
-    const fontFamily: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontFamily');
 
     const renewOutputs = async () => {
       const trimmedOutputs : { [key: string]: string } = {};
@@ -123,7 +148,7 @@ export class NotebookController {
           vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
           vscode.NotebookCellOutputItem.json(trimmedOutputs)
         ]),
-        ...Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id], fontFamily))
+        ...Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id]))
       ]);
     };
     const print = (id: string, text: string) => {
@@ -310,10 +335,12 @@ export class NotebookController {
     }
   }
 
-  private cssTerminal(name: string, text: string | undefined, error: Error | undefined, fontFamily: string | undefined): vscode.NotebookCellOutput {
-    const html = `<div style="background-color: #151515; border-radius: 5px;">
-      <div style="padding: 4px 16px; background-color: ${error ? '#ed4337' : '#80aac266'}; color: #151515; font-weight: 500; border-top-left-radius: 5px; border-top-right-radius: 5px">${name}</div>
-      <div style="padding: 16px;${!fontFamily?'':'font-family: '+fontFamily}">${text ? text.replace(/\n/g,'<br />') : ''}</div>
+  private cssTerminal(name: string, text: string | undefined, error: Error | undefined): vscode.NotebookCellOutput {
+    const windowColorVar = error ? 'var(--vscode-terminalCommandDecoration-errorBackground)' : 'var(--vscode-tab-activeBackground)';
+    const headerTextColorVar = error ? 'var(--vscode-statusBarItem-errorForeground)' : 'var(--vscode-tab-activeForeground)';
+    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; outline: solid 2px ${windowColorVar}">
+      <div style="padding: 2px 16px 4px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
+      <pre style="padding: 14px 16px; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre>
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
   }

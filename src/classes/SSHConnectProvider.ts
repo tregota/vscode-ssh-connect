@@ -42,27 +42,13 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private topTreeNodes: TreeNode[] = [];
 	private configRefresh: boolean = false;
 	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
-	private notebookActive: boolean = false;
+	public notebookActive: boolean = false;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
 		vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
 			if (event.affectsConfiguration('ssh-connect.hosts') || event.affectsConfiguration('ssh-connect.sources')) {
 				this.configRefresh = true;
 				this.refresh();
-			}
-		});
-
-		this.notebookActive = vscode.window.activeTextEditor?.document.fileName.endsWith('.sshbook') || false;
-		vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
-
-		vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
-			if (editor?.document.fileName.endsWith('.sshbook') && !this.notebookActive) {
-				this.notebookActive = true;
-				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
-			}
-			else if (!editor?.document.fileName.endsWith('.sshbook') && this.notebookActive) {
-				this.notebookActive = false;
-				vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', this.notebookActive);
 			}
 		});
 
@@ -266,7 +252,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						if (!!this.selectedNodes.find((node) => node.id === connectionNode.id)) {
+						if (this.notebookActive && !!this.selectedNodes.find((node) => node.id === connectionNode.id)) {
 							iconPath = connectionNode.config.iconPathConnected || {
 								dark: this.context.asAbsolutePath('media/server-active.svg'),
 								light: this.context.asAbsolutePath('media/server-active-light.svg')

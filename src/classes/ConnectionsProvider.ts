@@ -74,6 +74,7 @@ export default class ConnectionsProvider {
 
 		const promise = new Promise<Connection>((resolve, reject) => {
 			// reconnect or new connection?
+			this.outputChannel.appendLine(`${node.id}: connecting...`);
 			if (node.id in this.connections) {
 				this.connections[node.id].status = 'connecting';
 				this.connections[node.id].client = new Client();
@@ -112,6 +113,7 @@ export default class ConnectionsProvider {
 
 			// on successfull connection
 			client.on('ready', () => {
+				this.outputChannel.appendLine(`${node.id}: online.`);
 				this.connections[node.id].status = 'online';
 				this.refresh();
 				resolve(this.connections[node.id]);
@@ -135,6 +137,7 @@ export default class ConnectionsProvider {
 			
 			// on failed or closed connection
 			client.on('close', () => {
+				this.outputChannel.appendLine(`${node.id}: closed.`);
 				this.connections[node.id].status = 'offline';
 				this.refresh();
 			});
@@ -146,8 +149,8 @@ export default class ConnectionsProvider {
 					return failedToConnect(error);
 				}
 				else {
-					this.outputChannel.appendLine(`${node.name}: ${error.message}`);
-					vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+					this.outputChannel.appendLine(`${node.id}: ${error.message}`);
+					vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
 				}
 			});
 			
@@ -185,8 +188,8 @@ export default class ConnectionsProvider {
 							});
 						}
 						catch(error) {
-							this.outputChannel.appendLine(`${node.name}: privateKey error - ${error.message}`);
-							vscode.window.showErrorMessage(`${node.name}: privateKey error - ${error.message}`);
+							this.outputChannel.appendLine(`${node.id}: privateKey error - ${error.message}`);
+							vscode.window.showErrorMessage(`${node.id}: privateKey error - ${error.message}`);
 							// continue to next method
 						}
 					}
@@ -232,7 +235,8 @@ export default class ConnectionsProvider {
 							vscode.window.showInputBox(inputOptions, loginCancelCts.token).then(
 								(password) => {
 									if (password === undefined) {
-										return client.end();
+										client.end();
+										return failedToConnect(new Error('Login canceled'));
 									}
 									enteredPassword = password;
 									callback({
@@ -274,7 +278,8 @@ export default class ConnectionsProvider {
 									};
 									const response = await vscode.window.showInputBox(inputOptions, loginCancelCts.token);
 									if (response === undefined) {
-										return client.end();
+										client.end();
+										return failedToConnect(new Error('Login canceled'));
 									}
 									if (requested === 'password') {
 										enteredPassword = response;
@@ -302,8 +307,8 @@ export default class ConnectionsProvider {
 							});
 						}
 						catch(error) {
-							this.outputChannel.appendLine(`${node.name}: hostbased error - ${error.message}`);
-							vscode.window.showErrorMessage(`${node.name}: hostbased error - ${error.message}`);
+							this.outputChannel.appendLine(`${node.id}: hostbased error - ${error.message}`);
+							vscode.window.showErrorMessage(`${node.id}: hostbased error - ${error.message}`);
 							callback(false);
 						}
 					}
@@ -323,6 +328,7 @@ export default class ConnectionsProvider {
 
 			// connect either via jumpServer or directly
 			if (node.parent?.type === 'connection') {
+				this.outputChannel.appendLine(`${node.id}: requesting parent connection...`);
 				const parentNode = <ConnectionNode>node.parent;
 				this.connect(parentNode).then(
 					(connection) => {
@@ -336,9 +342,18 @@ export default class ConnectionsProvider {
 								authHandler,
 								privateKey: undefined // handled by authHandler
 							});
+							stream.on('close', () => {
+								this.outputChannel.appendLine(`${node.id}: parent stream closed.`);
+							});
+							stream.on('exit', (code, signal) => {
+								this.outputChannel.appendLine(`${node.id}: parent stream exited. ${code}: ${signal}`);
+							});
 						});
 					},
-					(error) => failedToConnect(error)
+					(error) => {
+						this.outputChannel.appendLine(`${node.id}: parent failed to connect.`);
+						failedToConnect(error);
+					}
 				);
 			}
 			else {
@@ -348,7 +363,7 @@ export default class ConnectionsProvider {
 					host: node.config.host,
 					port: node.config.port,
 					authHandler,
-					debug: node.config.enableDebug ? (info) => this.outputChannel.appendLine(`${node.name}: ${info}`) : undefined,
+					debug: node.config.enableDebug ? (info) => this.outputChannel.appendLine(`${node.id}: ${info}`) : undefined,
 					privateKey: undefined // handled by authHandler
 				});
 			}
@@ -365,6 +380,7 @@ export default class ConnectionsProvider {
 		if (!node?.id) {
 			return Promise.reject(new Error('No connection provided'));
 		}
+		this.outputChannel.appendLine(`${node.id}: disconnecting...`);
 		const connection = this.getConnection(node);
 		if (connection && connection.status === 'online') {
 			connection.client.end();
@@ -405,8 +421,8 @@ export default class ConnectionsProvider {
 			connection.ports[node.id].server.on('listening', () => { this.refresh(); });
 		}
 		catch (error) {
-			this.outputChannel.appendLine(`${parentNode.name}: ${error.message}`);
-			vscode.window.showErrorMessage(`${parentNode.name}: ${error.message}`);
+			this.outputChannel.appendLine(`${parentNode.id}: ${error.message}`);
+			vscode.window.showErrorMessage(`${parentNode.id}: ${error.message}`);
 		}
 	}
 
@@ -518,8 +534,8 @@ export default class ConnectionsProvider {
 			});
 		}
 		catch (error) {
-			this.outputChannel.appendLine(`${node.name}: ${error.message}`);
-			vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
+			this.outputChannel.appendLine(`${node.id}: ${error.message}`);
+			vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
 		}
 	}
 

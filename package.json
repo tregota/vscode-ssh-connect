@@ -140,12 +140,12 @@
         },
         {
           "command": "ssh-connect.enableMultiSelect",
-          "when": "view == ssh-connect.mainview && !ssh-connect.multiSelect",
+          "when": "view == ssh-connect.mainview && ssh-connect.notebookActive && !ssh-connect.multiSelect",
           "group": "navigation"
         },
         {
           "command": "ssh-connect.disableMultiSelect",
-          "when": "view == ssh-connect.mainview && ssh-connect.multiSelect",
+          "when": "view == ssh-connect.mainview && ssh-connect.notebookActive && ssh-connect.multiSelect",
           "group": "navigation"
         }
       ],
