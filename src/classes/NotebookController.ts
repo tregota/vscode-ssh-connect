@@ -202,7 +202,7 @@ export class NotebookController {
         outputs[connection.node.id] = '';
 
         return new Promise<string>((resolve, reject) => {
-          connection.client.exec(command, { pty: true }, (err, stream) => {
+          connection.client.exec(command, { pty: { cols: 200 } }, (err, stream) => {
             if (err) {
               print(connection.node.id, err.message);
               return reject(err);
@@ -338,9 +338,9 @@ export class NotebookController {
   private cssTerminal(name: string, text: string | undefined, error: Error | undefined): vscode.NotebookCellOutput {
     const windowColorVar = error ? 'var(--vscode-terminalCommandDecoration-errorBackground)' : 'var(--vscode-tab-activeBackground)';
     const headerTextColorVar = error ? 'var(--vscode-statusBarItem-errorForeground)' : 'var(--vscode-tab-activeForeground)';
-    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; outline: solid 2px ${windowColorVar}">
+    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; border: solid 2px ${windowColorVar}">
       <div style="padding: 2px 16px 4px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
-      <pre style="padding: 14px 16px; margin: 0; overflow: scroll; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre>
+      <pre style="padding: 10px 10px 3px 12px; margin: 0; max-height: 500px; overflow: scroll; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre>
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
   }
