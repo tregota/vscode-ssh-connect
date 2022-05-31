@@ -336,11 +336,12 @@ export class NotebookController {
   }
 
   private cssTerminal(name: string, text: string | undefined, error: Error | undefined): vscode.NotebookCellOutput {
-    const windowColorVar = error ? 'var(--vscode-terminalCommandDecoration-errorBackground)' : 'var(--vscode-tab-activeBackground)';
-    const headerTextColorVar = error ? 'var(--vscode-statusBarItem-errorForeground)' : 'var(--vscode-tab-activeForeground)';
-    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; border: solid 2px ${windowColorVar};">
-      <div style="padding: 2px 16px 4px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
-      <pre style="padding: 10px 10px 11px 12px; margin: 0; max-height: 500px; overflow: auto; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre>
+    const windowColorVar = error ? '#a5060659' : 'var(--vscode-notebook-cellEditorBackground)';
+    const headerTextColorVar = 'var(--vscode-editor-foreground)';
+    const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; outline: 1px solid var(--vscode-notebook-inactiveFocusedCellBorder); outline-offset: -1px">
+      <div style="padding: 4px 11px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
+      ${text ? '<pre style="padding: 10px 10px 11px 12px; margin: 0; max-height: 500px; overflow: auto; font-size: 11pt; color: var(--vscode-terminal-foreground); '+this.terminalCss+'">'+text+'</pre>' : ''}
+      ${error ? '<div style="padding: 4px 11px; background-color: '+windowColorVar+'; color: '+headerTextColorVar+'; font-weight: 500">'+error.message+'</div>' : ''}
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
   }

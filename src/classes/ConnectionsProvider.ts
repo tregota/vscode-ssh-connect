@@ -136,10 +136,14 @@ export default class ConnectionsProvider {
 			});
 			
 			// on failed or closed connection
-			client.on('close', () => {
-				this.outputChannel.appendLine(`${node.id}: closed.`);
+			client.on('close', (hadError) => {
+				this.outputChannel.appendLine(`${node.id}: closed${hadError ? ' with error' : ''}`);
 				this.connections[node.id].status = 'offline';
 				this.refresh();
+			});
+			// on failed or closed connection
+			client.on("end", () => {
+				this.outputChannel.appendLine(`${node.id}: ended.`);
 			});
 			
 			// print connection errors
