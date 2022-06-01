@@ -46,6 +46,16 @@ export class NotebookController {
       }
     });
 
+    // workaround since vscode doesn't recognize empty notebooks as a notebook. it's just undefined
+    // this enables notebook selection mode when creating a cell in an empty notebook
+    vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
+      if (editor?.document.uri.scheme === 'vscode-notebook-cell' && !this.sshConnectProvider.notebookActive) {
+        this.sshConnectProvider.notebookActive = true;
+        vscode.commands.executeCommand('setContext', 'ssh-connect.notebookActive', true);
+        this.sshConnectProvider.refresh();
+      }
+    });
+
     const fontFamily: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontFamily');
     const fontSize: string | undefined = vscode.workspace.getConfiguration('terminal').get('integrated.fontSize');
     this.terminalCss = (!fontFamily?'':`font-family: ${fontFamily};`)+(!fontSize?'':`font-size: ${fontSize}px;`);
