@@ -284,7 +284,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			const portForwardNode = <PortForwardNode>node;
 			description = portForwardNode.portForward.description;
 			color = new vscode.ThemeColor("list.deemphasizedForeground");
-			icon = 'circle-outline';
 
 			if (!portForwardNode.portForward.srcPort && !!portForwardNode.portForward.link) {
 				status = 'adhoc';
@@ -301,11 +300,16 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						icon = 'loading~spin';
 						break;
 					case 'online':
-						color = new vscode.ThemeColor("terminal.ansiGreen");
-						icon = 'circle-filled';
+						iconPath = {
+							dark: this.context.asAbsolutePath('media/port-online.svg'),
+							light: this.context.asAbsolutePath('media/port-online-light.svg')
+						};
 						break;
+					case 'offline':
+						iconPath = this.context.asAbsolutePath('media/port-offline.svg');
 					case 'error':
 						color = new vscode.ThemeColor("list.errorForeground");
+						icon = 'circle-outline';
 						break;
 				}
 			}

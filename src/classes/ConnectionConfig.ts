@@ -18,9 +18,7 @@ export default interface ConnectionConfig extends ConnectConfig {
 	iconPathConnected?: string
 	x11Port?: number
 	jumpServer?: string
-	sshShellPath?: string
-	sshShellArgs?: string[]
-	sshShellAsProcess?: boolean
 	portForwards?: PortForwardConfig[]
+	loginCommands?: Array<{ prompt: string, command: string, os?: "aix" | "darwin" | "freebsd" | "linux" | "openbsd" | "sunos" | "win32" | "android" }>
 	enableDebug?: boolean
 }

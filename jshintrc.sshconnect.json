@@ -120,6 +120,31 @@
               }
             }
           },
+          "loginCommands": {
+            "type": "array",
+            "description": "Commands to fetch login credentials from",
+            "default": [],
+            "items": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string",
+                  "default": "password",
+                  "description": "the prompt to respond to"
+                },
+                "command": {
+                  "type": "string",
+                  "description": "Command to run, %prompt% will be replaced by the prompt and %host% will be replaced by the host id"
+                },
+                "os": {
+                  "type": "string",
+                  "default": "",
+                  "enum": ["aix", "darwin", "freebsd", "linux", "openbsd", "sunos", "win32", "android"],
+                  "description": "Operating system to run the command on, optional"
+                }
+              }
+            }
+          },
           "agent": {
             "type": "string",
             "default": null,

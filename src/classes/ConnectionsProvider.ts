@@ -6,6 +6,8 @@ import { readFileSync } from 'fs';
 import { ConnectionNode, PortForwardNode } from './SSHConnectProvider';
 import * as keytar from 'keytar';
 import { PortForwardConfig } from './ConnectionConfig';
+import { exec } from 'child_process';
+const os = require('node:os');
 
 export interface PortForward {
 	status: 'offline' | 'connecting' | 'online' | 'error'
@@ -110,6 +112,7 @@ export default class ConnectionsProvider {
 			let enteredPassword: string;
 			let triedWithStoredPassword = false;
 			let neverWithStoredPassword = false;
+			let lastTriedLoginCommand = "";
 
 			// on successfull connection
 			client.on('ready', () => {
@@ -246,6 +249,26 @@ export default class ConnectionsProvider {
 							password: node.config.password
 						});
 					}
+					else if (lastTriedLoginCommand !== 'password' && node.config.loginCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
+						lastTriedLoginCommand = 'password';
+						const command = node.config.loginCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', node.name);
+
+						exec(command, (error, stdout, stderr) => {
+							if (error) {
+								client.end();
+								return failedToConnect(error);
+							}
+							if (stderr) {
+								client.end();
+								return failedToConnect(new Error(stderr));
+							}
+							callback({
+								type: 'password',
+								username: node.config.username!,
+								password: stdout
+							});
+						});
+					}
 					else {
 						let storedPassword: string | null;
 						keytar.getPassword('vscode-ssh-connect', node.id).then((setStoredPassword: string | null) => storedPassword = setStoredPassword).finally(() => {
@@ -302,6 +325,28 @@ export default class ConnectionsProvider {
 								else if (requested === "password" && storedPassword && !neverWithStoredPassword && !triedWithStoredPassword) {
 									triedWithStoredPassword = true;
 									responses.push(storedPassword!);
+								}
+								else if (lastTriedLoginCommand !== requested && node.config.loginCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
+									lastTriedLoginCommand = requested;
+									const command = node.config.loginCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', node.name);
+									try {
+										const response = await new Promise<string>((resolve, reject) => {
+											exec(command, (error, stdout, stderr) => {
+												if (error) {
+													return reject(error);
+												}
+												if (stderr) {
+													return reject(stderr);
+												}
+												resolve(stdout);
+											});
+										});
+										responses.push(response);
+									}
+									catch(error) {
+										client.end();
+										return failedToConnect(error);
+									}
 								}
 								else {
 									triedWithStoredPassword = false;
