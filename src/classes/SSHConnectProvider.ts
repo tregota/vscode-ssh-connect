@@ -204,8 +204,9 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 					srcPort = portForward.port;
 				}
 
-				if (['http', 'https'].includes(node.portForward.link)) {
-					vscode.env.openExternal(vscode.Uri.parse(`${node.portForward.link}://localhost:${srcPort}`));
+				let matches = /^(https?)(.*)$/.exec(node.portForward.link);
+				if (matches !== null) {
+					vscode.env.openExternal(vscode.Uri.parse(`${matches[1]}://localhost:${srcPort}${matches[2]}`));
 				}
 				else {
 					const command = node.portForward.link.replace('%port%', srcPort.toString());

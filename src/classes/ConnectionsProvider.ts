@@ -249,9 +249,9 @@ export default class ConnectionsProvider {
 							password: node.config.password
 						});
 					}
-					else if (lastTriedLoginCommand !== 'password' && node.config.loginCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
+					else if (lastTriedLoginCommand !== 'password' && node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
 						lastTriedLoginCommand = 'password';
-						const command = node.config.loginCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', node.name);
+						const command = node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', node.name);
 
 						exec(command, (error, stdout, stderr) => {
 							if (error) {
@@ -326,9 +326,9 @@ export default class ConnectionsProvider {
 									triedWithStoredPassword = true;
 									responses.push(storedPassword!);
 								}
-								else if (lastTriedLoginCommand !== requested && node.config.loginCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
+								else if (lastTriedLoginCommand !== requested && node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
 									lastTriedLoginCommand = requested;
-									const command = node.config.loginCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', node.name);
+									const command = node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', node.name);
 									try {
 										const response = await new Promise<string>((resolve, reject) => {
 											exec(command, (error, stdout, stderr) => {

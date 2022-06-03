@@ -93,7 +93,7 @@
                 },
                 "srcPort": {
                   "type": "number",
-                  "description": "The local port to forward"
+                  "description": "The local port to forward. Can be skipped if a command using %port% is specified, this will open a random port and keep it open as long as the process lives"
                 },
                 "dstAddr": {
                   "type": "string",
@@ -111,7 +111,7 @@
                 "link": {
                   "type": "string",
                   "default": "https",
-                  "description": "protocol (http|https) or command to run on the forwarded port, %port% is replaced with the local port number"
+                  "description": "protocol (http|https) with optional path (https/something/) or command to run on the forwarded port, %port% is replaced with the local port number"
                 },
                 "description": {
                   "type": "string",
@@ -120,7 +120,7 @@
               }
             }
           },
-          "loginCommands": {
+          "loginPromptCommands": {
             "type": "array",
             "description": "Commands to fetch login credentials from",
             "default": [],

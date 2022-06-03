@@ -19,6 +19,6 @@ export default interface ConnectionConfig extends ConnectConfig {
 	x11Port?: number
 	jumpServer?: string
 	portForwards?: PortForwardConfig[]
-	loginCommands?: Array<{ prompt: string, command: string, os?: "aix" | "darwin" | "freebsd" | "linux" | "openbsd" | "sunos" | "win32" | "android" }>
+	loginPromptCommands?: Array<{ prompt: string, command: string, os?: "aix" | "darwin" | "freebsd" | "linux" | "openbsd" | "sunos" | "win32" | "android" }>
 	enableDebug?: boolean
 }
