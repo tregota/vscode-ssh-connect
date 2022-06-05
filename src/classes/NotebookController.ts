@@ -212,7 +212,7 @@ export class NotebookController {
         outputs[connection.node.id] = '';
 
         return new Promise<string>((resolve, reject) => {
-          connection.client.exec(command, { pty: { cols: 200 } }, (err, stream) => {
+          connection.client!.exec(command, { pty: { cols: 200 } }, (err, stream) => {
             if (err) {
               print(connection.node.id, err.message);
               return reject(err);

@@ -18,10 +18,18 @@ export interface PortForward {
 
 export interface Connection {
 	status: 'offline' | 'connecting' | 'online' | 'error'
-	client: Client
+	client?: Client
 	terminals: Set<SSHTerminal | vscode.Terminal>
 	ports: { [id: string]: PortForward }
 	node: ConnectionNode
+	loginContext?: {
+		triedMethods: string[]
+		enteredPassword?: string
+		triedWithStoredPassword: boolean
+		neverWithStoredPassword: boolean
+		triedWithCommands: boolean
+		loginCancelCts: vscode.CancellationTokenSource
+	}
 	promise?: Promise<Connection>
 }
 
@@ -63,363 +71,164 @@ export default class ConnectionsProvider {
 	 * Connect to a server
 	 * @param node 
 	 */
-  public connect(node: ConnectionNode): Promise<Connection> {
+  public async connect(node: ConnectionNode): Promise<Connection> {
 		if (!node?.id) {
 			return Promise.reject(new Error('No connection provided'));
 		}
-		if (node.id in this.connections && ['online', 'connecting'].includes(this.connections[node.id].status)) {
-			const existingPromise = this.connections[node.id].promise;
-			if(existingPromise) {
-				return existingPromise;
-			}
+		if (node.id in this.connections === false) {
+			this.connections[node.id] = {
+				status: 'offline',
+				terminals: new Set(),
+				ports: {},
+				node,
+			};
 		}
 
-		const promise = new Promise<Connection>((resolve, reject) => {
-			// reconnect or new connection?
-			this.outputChannel.appendLine(`${node.id}: connecting...`);
-			if (node.id in this.connections) {
-				this.connections[node.id].status = 'connecting';
-				this.connections[node.id].client = new Client();
-				this.connections[node.id].terminals = new Set();
-				this.connections[node.id].ports = {};
-			}
-			else {
-				this.connections[node.id] = {
-					status: 'connecting',
-					client: new Client(),
-					terminals: new Set(),
-					ports: {},
-					node
-				};
-			}
-			this.refresh();
+		if(['offline', 'error'].includes(this.connections[node.id].status)) {
+			this.connections[node.id].promise = new Promise<Connection>(async (resolve, reject) => {
+				try {
+					this.outputChannel.appendLine(`${node.id}: connecting...`);
 
-			const failedToConnect = (error?: Error) => {
-				reject(error);
-				this.connections[node.id].status = 'offline';
-				this.refresh();
-			};
+					const connection = this.connections[node.id];
+					connection.status = 'connecting';
+					connection.client = new Client();
+					connection.ports = {};
+					connection.node = node;
+					connection.loginContext = {
+						triedMethods: [],
+						enteredPassword: undefined,
+						triedWithStoredPassword: false,
+						neverWithStoredPassword: false,
+						triedWithCommands: false,
+						loginCancelCts: new vscode.CancellationTokenSource()
+					};
+					
+					// display as connecting
+					this.refresh();
 
-			if (!node.config.username) {
-				return failedToConnect(new Error('Username required'));
-			}
-			if (!node.config.host) {
-				return failedToConnect(new Error('Host required'));
-			}
+					// function to call to set status to error and reject promise, displaying error message is up to the caller
+					const failedToConnect = (error?: Error) => {
+						reject(error);
+						connection.status = 'error';
+						this.refresh();
+					};
 
-			let loginCancelCts = new vscode.CancellationTokenSource();
-			const client = this.connections[node.id].client;
-			let enteredPassword: string;
-			let triedWithStoredPassword = false;
-			let neverWithStoredPassword = false;
-			let lastTriedLoginCommand = "";
-
-			// on successfull connection
-			client.on('ready', () => {
-				this.outputChannel.appendLine(`${node.id}: online.`);
-				this.connections[node.id].status = 'online';
-				this.refresh();
-				resolve(this.connections[node.id]);
-				this.autoForwardPorts(node);
-				if (enteredPassword && !neverWithStoredPassword) {
-					// if there was a stored password but the user had to enter something else
-					if (triedWithStoredPassword) {
-						keytar.deletePassword('vscode-ssh-connect', node.id);
+					if (!node.config.username) {
+						return failedToConnect(new Error('Username required'));
 					}
-					vscode.window.showInformationMessage("Do you want to save the password in system keychain?", "Yes", "No", `Never for ${node.name}`).then(answer => {
-						if (answer === "Yes") {
-							keytar.setPassword('vscode-ssh-connect', node.id, enteredPassword);
-							vscode.window.showInformationMessage("Saved");
-						}
-						else if (answer === `Never for ${node.name}`)  {
-							keytar.setPassword('vscode-ssh-connect', node.id, '%%NEVER%%');
-						}
-  				});
-				}
-			});
-			
-			// on failed or closed connection
-			client.on('close', (hadError) => {
-				this.outputChannel.appendLine(`${node.id}: closed${hadError ? ' with error' : ''}`);
-				this.connections[node.id].status = 'offline';
-				this.refresh();
-			});
-			// on failed or closed connection
-			client.on("end", () => {
-				this.outputChannel.appendLine(`${node.id}: ended.`);
-			});
-			
-			// print connection errors
-			client.on('error', (error) => {
-				if (this.connections[node.id].status === 'connecting') {
-					loginCancelCts.cancel();
-					return failedToConnect(error);
-				}
-				else {
-					this.outputChannel.appendLine(`${node.id}: ${error.message}`);
-					vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
-				}
-			});
-			
-      // handle incoming x11 connections
-			const x11Port = node.config.x11Port;
-			if (x11Port !== undefined) {
-				client.on('x11', (info, accept, reject) => {
-					const xserversock = new Socket();
-					xserversock.on('connect', () => {
-						const xclientsock = accept();
-						xclientsock.pipe(xserversock).pipe(xclientsock);
-					}).connect(x11Port, 'localhost');
-				});
-			}
+					if (!node.config.host) {
+						return failedToConnect(new Error('Host required'));
+					}
 
-			// auth handler to try various auth methods
-			let triedMethods: string[] = [];
-			const authHandler: AuthHandler = (methodsLeft, partialSuccess, callback) => {
-				if (methodsLeft === null) {
-					return callback({
-						type: 'none',
-						username: node.config.username!
-					});
-				}
-				if (methodsLeft.includes('publickey') && (node.config.privateKey || node.config.agent)) {
-					if (node.config.privateKey && !triedMethods.includes('publickey')){
-						triedMethods.push('publickey');
-						try {
-							const key = readFileSync(node.config.privateKey);
-							return callback({
-								type: 'publickey',
-								username: node.config.username!,
-								key,
-								passphrase: node.config.passphrase
+					// on successfull connection
+					connection.client!.on('ready', () => {
+						this.outputChannel.appendLine(`${node.id}: online.`);
+						connection.status = 'online';
+						this.refresh();
+						resolve(connection);
+						this.autoForwardPorts(node);
+
+						if (connection.loginContext?.enteredPassword) {
+							// if there was a stored password but the user had to enter something else
+							if (connection.loginContext?.triedWithStoredPassword) {
+								keytar.deletePassword('vscode-ssh-connect', node.id);
+							}
+							vscode.window.showInformationMessage("Do you want to save the password in system keychain?", "Yes", "No", `Never for ${node.name}`).then(answer => {
+								if (answer === "Yes") {
+									keytar.setPassword('vscode-ssh-connect', node.id, connection.loginContext!.enteredPassword!);
+									vscode.window.showInformationMessage("Saved");
+								}
+								else if (answer === `Never for ${node.name}`)  {
+									keytar.setPassword('vscode-ssh-connect', node.id, '%%NEVER%%');
+								}
 							});
 						}
-						catch(error) {
-							this.outputChannel.appendLine(`${node.id}: privateKey error - ${error.message}`);
-							vscode.window.showErrorMessage(`${node.id}: privateKey error - ${error.message}`);
-							// continue to next method
+					});
+					
+					// on failed or closed connection
+					connection.client!.on('close', (hadError) => {
+						this.outputChannel.appendLine(`${node.id}: closed${hadError ? ' with error' : ''}`);
+						connection.status = 'offline';
+						this.refresh();
+					});
+					// on failed or closed connection
+					connection.client!.on("end", () => {
+						this.outputChannel.appendLine(`${node.id}: ended.`);
+					});
+					
+					// print connection errors
+					connection.client!.on('error', (error) => {
+						if (connection.status === 'connecting') {
+							connection.loginContext?.loginCancelCts?.cancel();
+							return failedToConnect(error);
 						}
-					}
-					else if (node.config.agent && !triedMethods.includes('agent')) {
-						triedMethods.push('agent');
-						return callback({
-							type: 'agent',
-							username: node.config.username!,
-							agent: node.config.agent
+						else {
+							this.outputChannel.appendLine(`${node.id}: ${error.message}`);
+							vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
+						}
+					});
+					
+					// handle incoming x11 connections
+					const x11Port = node.config.x11Port;
+					if (x11Port !== undefined) {
+						connection.client!.on('x11', (info, accept, reject) => {
+							const xserversock = new Socket();
+							xserversock.on('connect', () => {
+								const xclientsock = accept();
+								xclientsock.pipe(xserversock).pipe(xclientsock);
+							}).connect(x11Port, 'localhost');
 						});
 					}
-				}
-				
-				if (methodsLeft.includes('hostbased') && node.config.localUsername && !triedMethods.includes('hostbased')) {
-					// I'm not sure how this works and the docs and AuthHandlerResult type doesn't agree, so we'll have to see what happens if someone tries it
-					triedMethods.push('hostbased');
-					if (node.config.privateKey) {
+
+					// create an auth handler function
+					const authHandler = await this.makeAuthHandler(connection);
+
+					// connect either via jumpServer or directly
+					if (node.parent?.type === 'connection') {
+						this.outputChannel.appendLine(`${node.id}: requesting parent connection...`);
+						const parentNode = <ConnectionNode>node.parent;
 						try {
-							const key = readFileSync(node.config.privateKey);
-							callback(<any>{
-								type: 'hostbased',
-								username: node.config.username!,
-								key,
-								passphrase: node.config.passphrase,
-								localUsername: node.config.localUsername,
-								localHostname: node.config.localHostname
+							const parentConnection = await this.connect(parentNode);
+							parentConnection.client!.forwardOut('127.0.0.1', 0, node.config.host || 'localhost', node.config.port || 22, async (error, stream) => {
+								if (error) {
+									return failedToConnect(new Error(`${node.id}: parent failed to forward port - ${error.message}`));
+								}
+								connection.client!.connect({
+									...node.config,
+									sock: stream,
+									authHandler,
+									privateKey: undefined // handled by authHandler
+								});
+								stream.on('close', () => {
+									this.outputChannel.appendLine(`${node.id}: parent stream closed.`);
+								});
+								stream.on('exit', (code, signal) => {
+									this.outputChannel.appendLine(`${node.id}: parent stream exited. ${code}: ${signal}`);
+								});
 							});
 						}
-						catch(error) {
-							this.outputChannel.appendLine(`${node.id}: hostbased error - ${error.message}`);
-							vscode.window.showErrorMessage(`${node.id}: hostbased error - ${error.message}`);
-							callback(false);
+						catch (error) {
+							failedToConnect(new Error(`${node.id}: parent failed to connect - ${error.message}`));
 						}
 					}
 					else {
-						callback(<any>{
-							type: 'hostbased',
-							username: node.config.username!,
-							localUsername: node.config.localUsername,
-							localHostname: node.config.localHostname
+						connection.client!.connect({
+							// tryKeyboard: true,
+							...node.config,
+							host: node.config.host,
+							port: node.config.port,
+							authHandler,
+							debug: node.config.enableDebug ? (info) => this.outputChannel.appendLine(`${node.id}: ${info}`) : undefined,
+							privateKey: undefined // handled by authHandler
 						});
 					}
 				}
-				else if (methodsLeft.includes('password') && (!triedMethods.includes('password') || triedWithStoredPassword)) {
-					triedMethods.push('password');
-					if(node.config.password) {
-						callback({
-							type: 'password',
-							username: node.config.username!,
-							password: node.config.password
-						});
-					}
-					else if (lastTriedLoginCommand !== 'password' && node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
-						lastTriedLoginCommand = 'password';
-						const command = node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', node.name);
-
-						exec(command, (error, stdout, stderr) => {
-							if (error) {
-								client.end();
-								return failedToConnect(error);
-							}
-							if (stderr) {
-								client.end();
-								return failedToConnect(new Error(stderr));
-							}
-							callback({
-								type: 'password',
-								username: node.config.username!,
-								password: stdout
-							});
-						});
-					}
-					else {
-						let storedPassword: string | null;
-						keytar.getPassword('vscode-ssh-connect', node.id).then((setStoredPassword: string | null) => storedPassword = setStoredPassword).finally(() => {
-							if (storedPassword && !triedWithStoredPassword) {
-								neverWithStoredPassword = storedPassword === '%%NEVER%%';
-								if (!neverWithStoredPassword) {
-									triedWithStoredPassword = true;
-									return callback({
-										type: 'password',
-										username: node.config.username!,
-										password: storedPassword
-									});
-								}
-							}
-							triedWithStoredPassword = false; // so it doesn't try password auth 3 times
-							const inputOptions = {
-								title: `${node.name} - password`,
-								placeHolder: 'Enter password',
-								password: true,
-								ignoreFocusOut: true
-							};
-							vscode.window.showInputBox(inputOptions, loginCancelCts.token).then(
-								(password) => {
-									if (password === undefined) {
-										client.end();
-										return failedToConnect(new Error('Login canceled'));
-									}
-									enteredPassword = password;
-									callback({
-										type: 'password',
-										username: node.config.username!,
-										password
-									});
-								}
-							);
-							return;
-						});
-					}
+				catch (error) {
+					reject(error);
 				}
-				else if (methodsLeft.includes('keyboard-interactive') && (!triedMethods.includes('keyboard-interactive') || triedWithStoredPassword)) {
-					triedMethods.push('keyboard-interactive');
-					callback({
-						type: 'keyboard-interactive',
-						username: node.config.username!,
-						prompt: async (name, instructions, instructionsLang, prompts, finish) => {
-							const responses: string[] = [];
-							for (const prompt of prompts) {
-								const requested = prompt.prompt.replace(': ', '').toLowerCase();
-								const storedPassword = await keytar.getPassword('vscode-ssh-connect', node.id);
-								neverWithStoredPassword = storedPassword === '%%NEVER%%';
-								if (requested === "password" && node.config.password) {
-									responses.push(node.config.password);
-								}
-								else if (requested === "password" && storedPassword && !neverWithStoredPassword && !triedWithStoredPassword) {
-									triedWithStoredPassword = true;
-									responses.push(storedPassword!);
-								}
-								else if (lastTriedLoginCommand !== requested && node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
-									lastTriedLoginCommand = requested;
-									const command = node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', node.name);
-									try {
-										const response = await new Promise<string>((resolve, reject) => {
-											exec(command, (error, stdout, stderr) => {
-												if (error) {
-													return reject(error);
-												}
-												if (stderr) {
-													return reject(stderr);
-												}
-												resolve(stdout);
-											});
-										});
-										responses.push(response);
-									}
-									catch(error) {
-										client.end();
-										return failedToConnect(error);
-									}
-								}
-								else {
-									triedWithStoredPassword = false;
-									const inputOptions = {
-										title: `${node.name} - ${requested}`,
-										placeHolder: `Enter ${requested}`,
-										password: requested === 'password',
-										ignoreFocusOut: true
-									};
-									const response = await vscode.window.showInputBox(inputOptions, loginCancelCts.token);
-									if (response === undefined) {
-										client.end();
-										return failedToConnect(new Error('Login canceled'));
-									}
-									if (requested === 'password') {
-										enteredPassword = response;
-									}
-									responses.push(response);
-								}
-							}
-							finish(responses);
-						}
-					});
-				}
-				else {
-					callback(false);
-				}
-			};
-
-			// connect either via jumpServer or directly
-			if (node.parent?.type === 'connection') {
-				this.outputChannel.appendLine(`${node.id}: requesting parent connection...`);
-				const parentNode = <ConnectionNode>node.parent;
-				this.connect(parentNode).then(
-					(connection) => {
-						connection.client.forwardOut('127.0.0.1', 0, node.config.host || 'localhost', node.config.port || 22, (error, stream) => {
-							if (error) {
-								return failedToConnect(error);
-							}
-							client.connect({
-								...node.config,
-								sock: stream,
-								authHandler,
-								privateKey: undefined // handled by authHandler
-							});
-							stream.on('close', () => {
-								this.outputChannel.appendLine(`${node.id}: parent stream closed.`);
-							});
-							stream.on('exit', (code, signal) => {
-								this.outputChannel.appendLine(`${node.id}: parent stream exited. ${code}: ${signal}`);
-							});
-						});
-					},
-					(error) => {
-						this.outputChannel.appendLine(`${node.id}: parent failed to connect.`);
-						failedToConnect(error);
-					}
-				);
-			}
-			else {
-				client.connect({
-					// tryKeyboard: true,
-					...node.config,
-					host: node.config.host,
-					port: node.config.port,
-					authHandler,
-					debug: node.config.enableDebug ? (info) => this.outputChannel.appendLine(`${node.id}: ${info}`) : undefined,
-					privateKey: undefined // handled by authHandler
-				});
-			}
-		});
-		this.connections[node.id].promise = promise;
-		return promise;
+			});
+		}
+		return this.connections[node.id].promise!;
 	}
 
 	/**
@@ -433,7 +242,7 @@ export default class ConnectionsProvider {
 		this.outputChannel.appendLine(`${node.id}: disconnecting...`);
 		const connection = this.getConnection(node);
 		if (connection && connection.status === 'online') {
-			connection.client.end();
+			connection.client?.end();
 		}
 	}
 
@@ -507,7 +316,7 @@ export default class ConnectionsProvider {
 		// setup a forward streams for each new connection
 		portForward.server.on('connection', (socket) => {
 			portForwardSockets.add(socket);
-			connection.client.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, options.dstAddr || 'localhost', options.dstPort || 22, (error, stream) => {
+			connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, options.dstAddr || 'localhost', options.dstPort || 22, (error, stream) => {
 				if (error) {
 					this.outputChannel.appendLine(`forwardPort: ${error.message}`);
 					vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
@@ -539,7 +348,7 @@ export default class ConnectionsProvider {
 		// if successful in opening port. setup a event listener to close the port forward server and its sockets when the connection is closed
 		portForward.server.on('listening', () => {
 			portForward.status = 'online';
-			connection.client.on('close', () => {
+			connection.client!.on('close', () => {
 				if (portForward.server.listening) {
 					for (const socket of portForwardSockets) {
 						socket.destroy();
@@ -614,7 +423,7 @@ export default class ConnectionsProvider {
 			if (connection?.status !== 'online') {
 				return reject(new Error('Connection is not online'));
 			}
-			connection.client.sftp((error, sftp) => {
+			connection.client!.sftp((error, sftp) => {
 				if (error) {
 					return reject(error);
 				}
@@ -627,4 +436,208 @@ export default class ConnectionsProvider {
 			});
 		});
 	}
+
+	private async makeAuthHandler(connection: Connection): Promise<AuthHandler> {
+		const context = connection.loginContext!;
+
+		let storedPassword = await keytar.getPassword('vscode-ssh-connect', connection.node.id);
+		context.neverWithStoredPassword = (storedPassword === '%%NEVER%%');
+		if (context.neverWithStoredPassword) {
+			storedPassword = null;
+		}
+
+		return (methodsLeft, partialSuccess, callback) => {
+			if (methodsLeft === null) {
+				return {
+					type: 'none',
+					username: connection.node.config.username!
+				};
+			}
+			if (methodsLeft.includes('publickey') && (connection.node.config.privateKey || connection.node.config.agent)) {
+				if (connection.node.config.privateKey && !context.triedMethods.includes('publickey')){
+					context.triedMethods.push('publickey');
+					try {
+						const key = readFileSync(connection.node.config.privateKey);
+						return {
+							type: 'publickey',
+							username: connection.node.config.username!,
+							key,
+							passphrase: connection.node.config.passphrase
+						};
+					}
+					catch(error) {
+						this.outputChannel.appendLine(`${connection.node.id}: private key file read error - ${error.message}`);
+					}
+				}
+				else if (connection.node.config.agent && !context.triedMethods.includes('agent')) {
+					context.triedMethods.push('agent');
+					return {
+						type: 'agent',
+						username: connection.node.config.username!,
+						agent: connection.node.config.agent
+					};
+				}
+			}
+			
+			if (methodsLeft.includes('hostbased') && connection.node.config.localUsername && !context.triedMethods.includes('hostbased')) {
+				// I'm not sure how this works and the docs and AuthHandlerResult type doesn't agree, so we'll have to see what happens if someone tries it
+				context.triedMethods.push('hostbased');
+				if (connection.node.config.privateKey) {
+					try {
+						const key = readFileSync(connection.node.config.privateKey);
+						return <any>{
+							type: 'hostbased',
+							username: connection.node.config.username!,
+							key,
+							passphrase: connection.node.config.passphrase,
+							localUsername: connection.node.config.localUsername,
+							localHostname: connection.node.config.localHostname
+						};
+					}
+					catch(error) {
+						this.outputChannel.appendLine(`${connection.node.id}: private key file read error - ${error.message}`);
+						callback(false);
+					}
+				}
+				else {
+					return <any>{
+						type: 'hostbased',
+						username: connection.node.config.username!,
+						localUsername: connection.node.config.localUsername,
+						localHostname: connection.node.config.localHostname
+					};
+				}
+			}
+
+			if (methodsLeft.includes('password') && (!context.triedMethods.includes('password') || context.triedWithStoredPassword)) {
+				if(connection.node.config.password) {
+					context.triedMethods.push('password');
+					return {
+						type: 'password',
+						username: connection.node.config.username!,
+						password: connection.node.config.password
+					};
+				}
+				else if (!context.triedWithCommands && connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
+					context.triedWithCommands = true;
+					const command = connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', connection.node.name);
+					exec(command, (error, stdout) => {
+						if (error) {
+							this.outputChannel.appendLine(`${connection.node.id}: error executing command for password - ${error.message}`);
+							return callback({
+								type: 'none',
+								username: connection.node.config.username!
+							});
+						}
+						callback({
+							type: 'password',
+							username: connection.node.config.username!,
+							password: stdout
+						});
+					});
+					return;
+				}
+				else {
+					context.triedMethods.push('password');
+					if (storedPassword && !context.triedWithStoredPassword) {
+						context.triedWithStoredPassword = true;
+						return {
+							type: 'password',
+							username: connection.node.config.username!,
+							password: storedPassword
+						};
+					}
+					context.triedWithStoredPassword = false; // so it doesn't try password auth 3 times
+					const inputOptions = {
+						title: `${connection.node.name} - password`,
+						placeHolder: 'Enter password',
+						password: true,
+						ignoreFocusOut: true
+					};
+					vscode.window.showInputBox(inputOptions, context.loginCancelCts.token).then((password) => {
+						if (password === undefined) {
+							return callback({
+								type: 'none',
+								username: connection.node.config.username!
+							});
+						}
+						if (!context.neverWithStoredPassword) {
+							context.enteredPassword = password;
+						}
+						callback({
+							type: 'password',
+							username: connection.node.config.username!,
+							password
+						});
+					});
+					return;
+				}
+			}
+			
+			if (methodsLeft.includes('keyboard-interactive') && (!context.triedMethods.includes('keyboard-interactive') || (context.triedWithStoredPassword || context.triedWithCommands))) {
+				context.triedMethods.push('keyboard-interactive');
+				return {
+					type: 'keyboard-interactive',
+					username: connection.node.config.username!,
+					prompt: async (name, instructions, instructionsLang, prompts, finish) => {
+						const responses: string[] = [];
+						for (const prompt of prompts) {
+							const requested = prompt.prompt.replace(': ', '').toLowerCase();
+							if (requested === "password" && connection.node.config.password) {
+								responses.push(connection.node.config.password);
+							}
+							else if (requested === "password" && storedPassword && !context.triedWithStoredPassword) {
+								context.triedWithStoredPassword = true;
+								responses.push(storedPassword!);
+							}
+							else if (!context.triedWithCommands && connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
+								context.triedWithCommands = true;
+								const command = connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', connection.node.name);
+								try {
+									const response = await new Promise<string>((resolve, reject) => {
+										exec(command, (error, stdout) => {
+											if (error) {
+												return reject(error);
+											}
+											resolve(stdout);
+										});
+									});
+									responses.push(response);
+								}
+								catch(error) {
+									this.outputChannel.appendLine(`${connection.node.id}: error executing command for ${requested} - ${error.message}`);
+									finish([]);
+								}
+							}
+							else {
+								context.triedWithStoredPassword = false;
+								context.triedWithCommands = false;
+								const inputOptions = {
+									title: `${connection.node.name} - ${requested}`,
+									placeHolder: `Enter ${requested}`,
+									password: requested === 'password',
+									ignoreFocusOut: true
+								};
+								const response = await vscode.window.showInputBox(inputOptions, context.loginCancelCts.token);
+								if (response === undefined) {
+									this.outputChannel.appendLine(`${connection.node.id}: Login canceled`);
+									return connection.client!.end(); // will trigger loginCancelCts
+								}
+								else {
+									responses.push(response);
+									if (requested === 'password' && !context.neverWithStoredPassword) {
+										context.enteredPassword = response;
+									}
+								}
+							}
+						}
+						finish(responses);
+					}
+				};
+			}
+			else {
+				return false;
+			}
+		};
+	};
 }

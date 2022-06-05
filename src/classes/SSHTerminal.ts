@@ -19,7 +19,7 @@ export default class SSHTerminal implements Pseudoterminal {
 	}
 
   connect() {
-    this.connection.client.shell((err, stream) => {
+    this.connection.client!.shell((err, stream) => {
       if (err) {
         this._onDidWrite.fire("Failed to open shell: " + err.message);
       }
