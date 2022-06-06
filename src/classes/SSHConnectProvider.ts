@@ -286,7 +286,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			description = portForwardNode.portForward.description;
 			color = new vscode.ThemeColor("list.deemphasizedForeground");
 
-			if (!portForwardNode.portForward.srcPort && !!portForwardNode.portForward.link) {
+			if (!portForwardNode.portForward.srcPort && !!portForwardNode.portForward.link && !portForwardNode.portForward.link.startsWith('http')) {
 				status = 'adhoc';
 			}
 			else if (!portForwardNode.portForward.srcPort || !portForwardNode.portForward.dstPort) {
@@ -294,26 +294,28 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				status = 'error';
 				description = 'bad config';
 			}
-			else {
+			if (status !== 'error') {
 				status = this.connectionsProvider.getPortStatus(portForwardNode);
-				switch (status) {
-					case 'connecting':
-						icon = 'loading~spin';
-						break;
-					case 'online':
-						iconPath = {
-							dark: this.context.asAbsolutePath('media/port-online.svg'),
-							light: this.context.asAbsolutePath('media/port-online-light.svg')
-						};
-						break;
-					case 'offline':
-						iconPath = this.context.asAbsolutePath('media/port-offline.svg');
-					case 'error':
-						color = new vscode.ThemeColor("list.errorForeground");
-						icon = 'circle-outline';
-						break;
-				}
 			}
+
+			switch (status) {
+				case 'connecting':
+					icon = 'loading~spin';
+					break;
+				case 'online':
+					iconPath = {
+						dark: this.context.asAbsolutePath('media/port-online.svg'),
+						light: this.context.asAbsolutePath('media/port-online-light.svg')
+					};
+					break;
+				case 'offline':
+					iconPath = this.context.asAbsolutePath('media/port-offline.svg');
+				case 'error':
+					color = new vscode.ThemeColor("list.errorForeground");
+					icon = 'circle-outline';
+					break;
+			}
+			
 			if (!!portForwardNode.portForward.link) {
 				subtype = 'Linked';
 			}

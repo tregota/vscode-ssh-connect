@@ -27,7 +27,6 @@ export interface Connection {
 		enteredPassword?: string
 		triedWithStoredPassword: boolean
 		neverWithStoredPassword: boolean
-		triedWithCommands: boolean
 		loginCancelCts: vscode.CancellationTokenSource
 	}
 	promise?: Promise<Connection>
@@ -87,8 +86,6 @@ export default class ConnectionsProvider {
 		if(['offline', 'error'].includes(this.connections[node.id].status)) {
 			this.connections[node.id].promise = new Promise<Connection>(async (resolve, reject) => {
 				try {
-					this.outputChannel.appendLine(`${node.id}: connecting...`);
-
 					const connection = this.connections[node.id];
 					connection.status = 'connecting';
 					connection.client = new Client();
@@ -99,9 +96,10 @@ export default class ConnectionsProvider {
 						enteredPassword: undefined,
 						triedWithStoredPassword: false,
 						neverWithStoredPassword: false,
-						triedWithCommands: false,
 						loginCancelCts: new vscode.CancellationTokenSource()
 					};
+
+					this.log(connection, `connecting...`);
 					
 					// display as connecting
 					this.refresh();
@@ -122,7 +120,7 @@ export default class ConnectionsProvider {
 
 					// on successfull connection
 					connection.client!.on('ready', () => {
-						this.outputChannel.appendLine(`${node.id}: online.`);
+						this.log(connection, 'online.');
 						connection.status = 'online';
 						this.refresh();
 						resolve(connection);
@@ -147,13 +145,13 @@ export default class ConnectionsProvider {
 					
 					// on failed or closed connection
 					connection.client!.on('close', (hadError) => {
-						this.outputChannel.appendLine(`${node.id}: closed${hadError ? ' with error' : ''}`);
+						this.log(connection, `closed${hadError ? ' with error' : ''}`);
 						connection.status = 'offline';
 						this.refresh();
 					});
 					// on failed or closed connection
 					connection.client!.on("end", () => {
-						this.outputChannel.appendLine(`${node.id}: ended.`);
+						this.log(connection, 'ended.');
 					});
 					
 					// print connection errors
@@ -163,7 +161,7 @@ export default class ConnectionsProvider {
 							return failedToConnect(error);
 						}
 						else {
-							this.outputChannel.appendLine(`${node.id}: ${error.message}`);
+							this.log(connection, error.message);
 							vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
 						}
 					});
@@ -185,7 +183,7 @@ export default class ConnectionsProvider {
 
 					// connect either via jumpServer or directly
 					if (node.parent?.type === 'connection') {
-						this.outputChannel.appendLine(`${node.id}: requesting parent connection...`);
+						this.log(connection, 'requesting parent connection...');
 						const parentNode = <ConnectionNode>node.parent;
 						try {
 							const parentConnection = await this.connect(parentNode);
@@ -200,10 +198,10 @@ export default class ConnectionsProvider {
 									privateKey: undefined // handled by authHandler
 								});
 								stream.on('close', () => {
-									this.outputChannel.appendLine(`${node.id}: parent stream closed.`);
+									this.log(connection, 'parent stream closed.');
 								});
 								stream.on('exit', (code, signal) => {
-									this.outputChannel.appendLine(`${node.id}: parent stream exited. ${code}: ${signal}`);
+									this.log(connection, `parent stream exited. ${code}: ${signal}`);
 								});
 							});
 						}
@@ -218,7 +216,7 @@ export default class ConnectionsProvider {
 							host: node.config.host,
 							port: node.config.port,
 							authHandler,
-							debug: node.config.enableDebug ? (info) => this.outputChannel.appendLine(`${node.id}: ${info}`) : undefined,
+							debug: node.config.enableDebug ? (info) => this.log(node, info) : undefined,
 							privateKey: undefined // handled by authHandler
 						});
 					}
@@ -239,9 +237,9 @@ export default class ConnectionsProvider {
 		if (!node?.id) {
 			return Promise.reject(new Error('No connection provided'));
 		}
-		this.outputChannel.appendLine(`${node.id}: disconnecting...`);
 		const connection = this.getConnection(node);
 		if (connection && connection.status === 'online') {
+			this.log(connection, 'disconnecting...');
 			connection.client?.end();
 		}
 	}
@@ -263,8 +261,9 @@ export default class ConnectionsProvider {
 	 */
 	public async openPort(node: PortForwardNode): Promise<void> {
 		const parentNode = <ConnectionNode>node.parent;
+		let connection: Connection;
 		try {
-			const connection = await this.connect(parentNode);
+			connection = await this.connect(parentNode);
 
 			if (connection.ports[node.id]?.status === 'online') {
 				return;
@@ -280,7 +279,7 @@ export default class ConnectionsProvider {
 			connection.ports[node.id].server.on('listening', () => { this.refresh(); });
 		}
 		catch (error) {
-			this.outputChannel.appendLine(`${parentNode.id}: ${error.message}`);
+			this.log(parentNode, error.message);
 			vscode.window.showErrorMessage(`${parentNode.id}: ${error.message}`);
 		}
 	}
@@ -318,7 +317,7 @@ export default class ConnectionsProvider {
 			portForwardSockets.add(socket);
 			connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, options.dstAddr || 'localhost', options.dstPort || 22, (error, stream) => {
 				if (error) {
-					this.outputChannel.appendLine(`forwardPort: ${error.message}`);
+					this.log(connection, `forwardPort: ${error.message}`);
 					vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
 					socket.destroy();
 					return;
@@ -335,7 +334,7 @@ export default class ConnectionsProvider {
 				portForward.status = 'error';
 				portForward.server.close();
 			}
-			this.outputChannel.appendLine(`forwardPort: ${error.message}`);
+			this.log(connection, `forwardPort: ${error.message}`);
 			vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
 		});
 
@@ -393,7 +392,7 @@ export default class ConnectionsProvider {
 			});
 		}
 		catch (error) {
-			this.outputChannel.appendLine(`${node.id}: ${error.message}`);
+			this.log(node, error.message);
 			vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
 		}
 	}
@@ -412,7 +411,7 @@ export default class ConnectionsProvider {
 	// 			});
 	// 	}
 	// 	catch (error) {
-	// 		this.outputChannel.appendLine(`${node.name}: ${error.message}`);
+	// 		this.log(node, error.message);
 	// 		vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
 	// 	}
 	// }
@@ -447,6 +446,7 @@ export default class ConnectionsProvider {
 		}
 
 		return (methodsLeft, partialSuccess, callback) => {
+			this.log(connection, `AuthHandler: methodsLeft: ${methodsLeft}`);
 			if (methodsLeft === null) {
 				return {
 					type: 'none',
@@ -458,6 +458,7 @@ export default class ConnectionsProvider {
 					context.triedMethods.push('publickey');
 					try {
 						const key = readFileSync(connection.node.config.privateKey);
+						this.log(connection, `AuthHandler: Private Key from file ${connection.node.config.privateKey}`);
 						return {
 							type: 'publickey',
 							username: connection.node.config.username!,
@@ -466,11 +467,12 @@ export default class ConnectionsProvider {
 						};
 					}
 					catch(error) {
-						this.outputChannel.appendLine(`${connection.node.id}: private key file read error - ${error.message}`);
+						this.log(connection, `AuthHandler: Private Key file read error - ${error.message}`);
 					}
 				}
 				else if (connection.node.config.agent && !context.triedMethods.includes('agent')) {
 					context.triedMethods.push('agent');
+					this.log(connection, `AuthHandler: Private Key from Agent`);
 					return {
 						type: 'agent',
 						username: connection.node.config.username!,
@@ -485,6 +487,7 @@ export default class ConnectionsProvider {
 				if (connection.node.config.privateKey) {
 					try {
 						const key = readFileSync(connection.node.config.privateKey);
+						this.log(connection, `AuthHandler: Hostbased auth with private key: ${connection.node.config.privateKey}`);
 						return <any>{
 							type: 'hostbased',
 							username: connection.node.config.username!,
@@ -495,11 +498,12 @@ export default class ConnectionsProvider {
 						};
 					}
 					catch(error) {
-						this.outputChannel.appendLine(`${connection.node.id}: private key file read error - ${error.message}`);
+						this.log(connection, `AuthHandler: Private Key file read error - ${error.message}`);
 						callback(false);
 					}
 				}
 				else {
+					this.log(connection, `AuthHandler: Hostbased auth with no private key`);
 					return <any>{
 						type: 'hostbased',
 						username: connection.node.config.username!,
@@ -512,18 +516,19 @@ export default class ConnectionsProvider {
 			if (methodsLeft.includes('password') && (!context.triedMethods.includes('password') || context.triedWithStoredPassword)) {
 				if(connection.node.config.password) {
 					context.triedMethods.push('password');
+					this.log(connection, 'AuthHandler: Password auth');
 					return {
 						type: 'password',
 						username: connection.node.config.username!,
 						password: connection.node.config.password
 					};
 				}
-				else if (!context.triedWithCommands && connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
-					context.triedWithCommands = true;
+				else if (connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
 					const command = connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', connection.node.name);
+					this.log(connection, `AuthHandler: Password auth using command: ${command}`);
 					exec(command, (error, stdout) => {
 						if (error) {
-							this.outputChannel.appendLine(`${connection.node.id}: error executing command for password - ${error.message}`);
+							this.log(connection, `AuthHandler: Error executing command for password - ${error.message}`);
 							return callback({
 								type: 'none',
 								username: connection.node.config.username!
@@ -541,6 +546,7 @@ export default class ConnectionsProvider {
 					context.triedMethods.push('password');
 					if (storedPassword && !context.triedWithStoredPassword) {
 						context.triedWithStoredPassword = true;
+						this.log(connection, 'AuthHandler: Password auth using stored password');
 						return {
 							type: 'password',
 							username: connection.node.config.username!,
@@ -548,6 +554,7 @@ export default class ConnectionsProvider {
 						};
 					}
 					context.triedWithStoredPassword = false; // so it doesn't try password auth 3 times
+					this.log(connection, 'AuthHandler: Password auth using prompt');
 					const inputOptions = {
 						title: `${connection.node.name} - password`,
 						placeHolder: 'Enter password',
@@ -556,10 +563,8 @@ export default class ConnectionsProvider {
 					};
 					vscode.window.showInputBox(inputOptions, context.loginCancelCts.token).then((password) => {
 						if (password === undefined) {
-							return callback({
-								type: 'none',
-								username: connection.node.config.username!
-							});
+							this.log(connection, 'AuthHandler: Login canceled');
+							return connection.client!.end(); // will trigger loginCancelCts
 						}
 						if (!context.neverWithStoredPassword) {
 							context.enteredPassword = password;
@@ -574,8 +579,9 @@ export default class ConnectionsProvider {
 				}
 			}
 			
-			if (methodsLeft.includes('keyboard-interactive') && (!context.triedMethods.includes('keyboard-interactive') || (context.triedWithStoredPassword || context.triedWithCommands))) {
+			if (methodsLeft.includes('keyboard-interactive') && (!context.triedMethods.includes('keyboard-interactive') || context.triedWithStoredPassword)) {
 				context.triedMethods.push('keyboard-interactive');
+				this.log(connection, 'AuthHandler: Keyboard-interactive auth');
 				return {
 					type: 'keyboard-interactive',
 					username: connection.node.config.username!,
@@ -584,15 +590,13 @@ export default class ConnectionsProvider {
 						for (const prompt of prompts) {
 							const requested = prompt.prompt.replace(': ', '').toLowerCase();
 							if (requested === "password" && connection.node.config.password) {
+								this.log(connection, 'AuthHandler: Keyboard-interactive auth get password from config');
 								responses.push(connection.node.config.password);
+								continue;
 							}
-							else if (requested === "password" && storedPassword && !context.triedWithStoredPassword) {
-								context.triedWithStoredPassword = true;
-								responses.push(storedPassword!);
-							}
-							else if (!context.triedWithCommands && connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
-								context.triedWithCommands = true;
+							if (connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
 								const command = connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', connection.node.name);
+								this.log(connection, `AuthHandler: Keyboard-interactive auth get ${requested} using command: ${command}`);
 								try {
 									const response = await new Promise<string>((resolve, reject) => {
 										exec(command, (error, stdout) => {
@@ -603,31 +607,41 @@ export default class ConnectionsProvider {
 										});
 									});
 									responses.push(response);
+									continue;
 								}
 								catch(error) {
-									this.outputChannel.appendLine(`${connection.node.id}: error executing command for ${requested} - ${error.message}`);
-									finish([]);
+									this.log(connection, `AuthHandler: error executing command for ${requested} - ${error.message}`);
 								}
 							}
-							else {
-								context.triedWithStoredPassword = false;
-								context.triedWithCommands = false;
-								const inputOptions = {
-									title: `${connection.node.name} - ${requested}`,
-									placeHolder: `Enter ${requested}`,
-									password: requested === 'password',
-									ignoreFocusOut: true
-								};
-								const response = await vscode.window.showInputBox(inputOptions, context.loginCancelCts.token);
-								if (response === undefined) {
-									this.outputChannel.appendLine(`${connection.node.id}: Login canceled`);
-									return connection.client!.end(); // will trigger loginCancelCts
+							if (requested === "password" && storedPassword) {
+								if (context.triedWithStoredPassword) {
+									// if we have tried with stored password and failed and keyboard-interactive is tried again because context.triedWithStoredPassword is true, then reset it to false so keyboard-interactive isn't attempted a third time because of it
+									context.triedWithStoredPassword = false;
 								}
 								else {
-									responses.push(response);
-									if (requested === 'password' && !context.neverWithStoredPassword) {
-										context.enteredPassword = response;
-									}
+									this.log(connection, 'AuthHandler: Keyboard-interactive auth using stored password');
+									context.triedWithStoredPassword = true;
+									responses.push(storedPassword!);
+									continue;
+								}
+							}
+							// if we get here, we need to ask the user for the requested input
+							const inputOptions = {
+								title: `${connection.node.name} - ${requested}`,
+								placeHolder: `Enter ${requested}`,
+								password: requested === 'password',
+								ignoreFocusOut: true
+							};
+							this.log(connection, `AuthHandler: Keyboard-interactive auth prompting for ${requested}`);
+							const response = await vscode.window.showInputBox(inputOptions, context.loginCancelCts.token);
+							if (response === undefined) {
+								this.log(connection, 'AuthHandler: Login canceled');
+								return connection.client!.end(); // will trigger loginCancelCts
+							}
+							else {
+								responses.push(response);
+								if (requested === 'password' && !context.neverWithStoredPassword) {
+									context.enteredPassword = response;
 								}
 							}
 						}
@@ -640,4 +654,13 @@ export default class ConnectionsProvider {
 			}
 		};
 	};
+
+	private log(node: Connection | ConnectionNode, message: string) {
+		if ('node' in node) {
+			node = (<Connection>node).node;
+		}
+		if (node.config.enableDebug) {
+			this.outputChannel.appendLine(`${node.id}: ${message}`);
+		}
+	}
 }
