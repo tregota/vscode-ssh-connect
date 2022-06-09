@@ -152,7 +152,7 @@
       "view/item/context": [
         {
           "command": "ssh-connect.connect",
-          "when": "view == ssh-connect.mainview && viewItem =~ /connection[^\\.]*.offline/",
+          "when": "view == ssh-connect.mainview && viewItem =~ /connection[^\\.]*.(offline|error)/",
           "group": "inline@1"
         },
         {
@@ -162,7 +162,7 @@
         },
         {
           "command": "ssh-connect.openTerminal",
-          "when": "view == ssh-connect.mainview && viewItem =~ /^connection[^\\.]*.(online|offline)/",
+          "when": "view == ssh-connect.mainview && viewItem =~ /^connection[^\\.]*.(online|offline|error)/",
           "group": "inline@0"
         },
         {
@@ -284,7 +284,7 @@
                     },
                     "srcPort": {
                       "type": "number",
-                      "description": "The local port to forward. Can be skipped if a command using %port% is specified, this will open a random port and keep it open as long as the process lives"
+                      "description": "The local port to forward. Can be skipped if a link command using %port% is specified, this will open a random port and keep it open as long as the process lives"
                     },
                     "dstAddr": {
                       "type": "string",

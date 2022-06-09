@@ -93,7 +93,7 @@
                 },
                 "srcPort": {
                   "type": "number",
-                  "description": "The local port to forward. Can be skipped if a command using %port% is specified, this will open a random port and keep it open as long as the process lives"
+                  "description": "The local port to forward. Can be skipped if a link command using %port% is specified, this will open a random port and keep it open as long as the process lives"
                 },
                 "dstAddr": {
                   "type": "string",
