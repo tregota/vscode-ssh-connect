@@ -7,7 +7,9 @@ import { ConnectionNode, PortForwardNode } from './SSHConnectProvider';
 import * as keytar from 'keytar';
 import { PortForwardConfig } from './ConnectionConfig';
 import { exec } from 'child_process';
+import { vscodeVariables } from '../utils';
 const os = require('node:os');
+
 
 export interface PortForward {
 	status: 'offline' | 'connecting' | 'online' | 'error'
@@ -401,25 +403,6 @@ export default class ConnectionsProvider {
 		}
 	}
 
-	// public async openRemoteSSH(node: ConnectionNode): Promise<void> {
-	// 	try {
-		
-	// 	this doesn't work nearly good enough
-	// 	since it cannot handle login
-	// 	if only it could be done via a ssh2 shell session
-
-	// 			const connection = await this.connect(node);
-	// 			const portForward = await this.forwardPortAndWait(connection, { dstPort: node.config.port });
-	// 			vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.parse(`vscode-remote://ssh-remote+${node.config.username}@localhost:${portForward.port}/root/`), {
-	// 				forceNewWindow: true
-	// 			});
-	// 	}
-	// 	catch (error) {
-	// 		this.log(node, error.message);
-	// 		vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
-	// 	}
-	// }
-
 	public readRemoteFile(node: ConnectionNode, filePath: string): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const connection = this.getConnection(node);
@@ -461,7 +444,7 @@ export default class ConnectionsProvider {
 				if (connection.node.config.privateKey && !context.triedMethods.includes('publickey')){
 					context.triedMethods.push('publickey');
 					try {
-						const key = readFileSync(connection.node.config.privateKey);
+						const key = readFileSync(vscodeVariables(connection.node.config.privateKey.toString()));
 						this.log(connection, `AuthHandler: Private Key from file ${connection.node.config.privateKey}`);
 						return {
 							type: 'publickey',
@@ -480,7 +463,7 @@ export default class ConnectionsProvider {
 					return {
 						type: 'agent',
 						username: connection.node.config.username!,
-						agent: connection.node.config.agent
+						agent: vscodeVariables(connection.node.config.agent.toString())
 					};
 				}
 			}
@@ -528,7 +511,7 @@ export default class ConnectionsProvider {
 					};
 				}
 				else if (connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
-					const command = connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', 'password').replace('%host%', connection.node.name);
+					const command = vscodeVariables(connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('${prompt}', 'password').replace('${host}', connection.node.name));
 					this.log(connection, `AuthHandler: Password auth using command: ${command}`);
 					exec(command, (error, stdout) => {
 						if (error) {
@@ -599,7 +582,7 @@ export default class ConnectionsProvider {
 								continue;
 							}
 							if (connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))) {
-								const command = connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('%prompt%', requested).replace('%host%', connection.node.name);
+								const command = vscodeVariables(connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === requested && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('${prompt}', requested).replace('${host}', connection.node.name));
 								this.log(connection, `AuthHandler: Keyboard-interactive auth get ${requested} using command: ${command}`);
 								try {
 									const response = await new Promise<string>((resolve, reject) => {

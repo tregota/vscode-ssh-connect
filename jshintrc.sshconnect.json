@@ -20,7 +20,7 @@
           },
           "connection": {
             "type": "string",
-            "description": "which connection to use if sftp. full path with any folders and id. E.g. \"folder/subfolder/connectionId\""
+            "description": "which host id to use if sftp. E.g. \"folder/subfolder/host\""
           },
           "autoConnect": {
             "type": "boolean",
@@ -29,7 +29,7 @@
           },
           "path": {
             "type": "string",
-            "description": "path to file either locally or on server"
+            "description": "path to file either locally or on server, supports vscode variables"
           }
         }
       }
@@ -85,7 +85,7 @@
                 },
                 "srcPort": {
                   "type": "number",
-                  "description": "The local port to forward. Can be skipped if a link command using %port% is specified, this will open a random port and keep it open as long as the process lives"
+                  "description": "The local port to forward. Can be skipped if a link command using ${port} is specified, this will open a random port and keep it open as long as the process lives"
                 },
                 "dstAddr": {
                   "type": "string",
@@ -103,7 +103,7 @@
                 "link": {
                   "type": "string",
                   "default": "https",
-                  "description": "protocol (http|https) with optional path (https/something/) or command to run on the forwarded port, %port% is replaced with the local port number"
+                  "description": "protocol (http|https) with optional path (https/something/) or command to run on the forwarded port, ${port} is replaced with the local port number"
                 },
                 "description": {
                   "type": "string",
@@ -126,7 +126,7 @@
                 },
                 "command": {
                   "type": "string",
-                  "description": "Command to run, %prompt% will be replaced by the prompt and %host% will be replaced by the host id"
+                  "description": "Command to run, ${prompt} will be replaced by the prompt and ${host} will be replaced by the host id"
                 },
                 "os": {
                   "type": "string",

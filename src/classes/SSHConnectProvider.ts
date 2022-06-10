@@ -3,6 +3,7 @@ import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider, { Connection, PortForward } from './ConnectionsProvider';
 import { readFileSync, existsSync } from 'fs';
 import { exec } from 'child_process';
+import { vscodeVariables } from '../utils';
 
 export interface TreeNode {
 	name: string
@@ -215,7 +216,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 					vscode.env.openExternal(vscode.Uri.parse(`${matches[1]}://localhost:${srcPort}${matches[2]}`));
 				}
 				else {
-					const command = node.portForward.link.replace('%port%', srcPort.toString());
+					const command = vscodeVariables(node.portForward.link.replace('${port}', srcPort.toString()));
 					const process = exec(command, (error, stdout, stderr) => {
 						if (error) {
 							vscode.window.showErrorMessage(`${node.name}: ${error.message}`);
@@ -400,7 +401,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			}
 		}
 
-		this.propagateNodeTreeConfig(nodeTree);
+		this.processNodeTreeConfig(nodeTree);
 		this.topTreeNodes = nodeTree;
 	}
 
@@ -412,7 +413,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				case 'file':
 					id = `file/${configurationSource.path}`;
 					if (this.configRefresh || !(id in this.externalConfigCache)) {
-						json = readFileSync(configurationSource.path, 'utf8');
+						json = readFileSync(vscodeVariables(configurationSource.path), 'utf8');
 					}
 					break;
 				case 'sftp':
@@ -423,7 +424,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 							const status = this.connectionsProvider.getConnectionStatus(node);
 							if (configurationSource.autoConnect || status === 'online') {
 								await this.connectionsProvider.connect(node);
-								json = await this.connectionsProvider.readRemoteFile(node, configurationSource.path);
+								json = await this.connectionsProvider.readRemoteFile(node, vscodeVariables(configurationSource.path));
 								if (status === 'offline') {
 									await this.connectionsProvider.disconnect(node);
 								}
@@ -518,14 +519,21 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		}
 	}
 
-	private propagateNodeTreeConfig(tree: TreeNode[], config?: ConnectionConfig): void {
+	private processNodeTreeConfig(tree: TreeNode[], config?: ConnectionConfig): void {
 		const { id, iconPath, iconPathConnected, ...filteredConfig } = config || {};
 		for (const node of tree) {
+			if (node.type === 'portForward') {
+				continue;
+			}
 			const configNode = <ConnectionNode|FolderNode>node;
 			if (config) {
 				configNode.config = { ...filteredConfig, ...configNode.config };
 			}
-			this.propagateNodeTreeConfig(configNode.children, configNode.config);
+			// interpolation that isn't dependent on real time stuff
+			configNode.config.iconPath = configNode.config.iconPath && vscodeVariables(configNode.config.iconPath);
+			configNode.config.iconPathConnected = configNode.config.iconPathConnected && vscodeVariables(configNode.config.iconPathConnected);
+
+			this.processNodeTreeConfig(configNode.children, configNode.type === 'folder' ? configNode.config : undefined);
 		}
 	}
 }
