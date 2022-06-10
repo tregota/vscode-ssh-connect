@@ -56,10 +56,6 @@
             "type": "string",
             "description": "Icon path when connected"
           },
-          "folder": {
-            "type": "string",
-            "description": "Tree view folder path"
-          },
           "x11Port": {
             "type": "number",
             "default": 6000,
@@ -69,10 +65,6 @@
             "type": "boolean",
             "default": false,
             "description": "If set, debug messages will be logged to the console"
-          },
-          "jumpServer": {
-            "type": "string",
-            "description": "Id of the connection that this connection has to be forwarded through"
           },
           "sshShellPath": {
             "type": "string",

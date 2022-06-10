@@ -182,9 +182,13 @@ export default class ConnectionsProvider {
 					const authHandler = await this.makeAuthHandler(connection);
 
 					// connect either via jumpServer or directly
-					if (node.parent?.type === 'connection') {
+					let parent = node.parent;
+					while (parent && parent.type !== 'connection') {
+						parent = parent.parent;
+					}
+					if (parent) {
 						this.log(connection, 'requesting parent connection...');
-						const parentNode = <ConnectionNode>node.parent;
+						const parentNode = <ConnectionNode>parent;
 						try {
 							const parentConnection = await this.connect(parentNode);
 							parentConnection.client!.forwardOut('127.0.0.1', 0, node.config.host || 'localhost', node.config.port || 22, async (error, stream) => {

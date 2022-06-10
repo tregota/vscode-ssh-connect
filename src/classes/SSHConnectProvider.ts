@@ -51,6 +51,12 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				this.refresh();
 			}
 		});
+		vscode.workspace.createFileSystemWatcher('**/sshconnect.json').onDidChange((uri) => {
+			if (uri.path.endsWith('.vscode/sshconnect.json')) {
+				this.configRefresh = true;
+				this.refresh();
+			}
+		});
 
 		connectionsProvider.onDidChange(() => {
 			this.refresh();
@@ -239,7 +245,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		let status;
 		let description: string | undefined;
 		let subtype = '';
-		let collapsibleState = node.children.length ? (node.children.find(c => c.type === 'connection') ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed) : vscode.TreeItemCollapsibleState.None;
+		let collapsibleState = node.children.length ? (node.children.find(c => c.type !== 'portForward') ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed) : vscode.TreeItemCollapsibleState.None;
 
 		if (node.type === 'connection') {
 			const connectionNode = <ConnectionNode>node;
@@ -359,7 +365,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						const json = readFileSync(path, 'utf8');
 						const configuration = JSON.parse(json);
 						for (const connectionConfig of (configuration.hosts || [])) {
-							const node = <ConnectionNode>this.addToNodeTree(nodeTree, connectionConfig.folder?.split('/') || [], connectionConfig);
+							const node = <ConnectionNode>this.addToNodeTree(nodeTree, connectionConfig.id.split('/'), connectionConfig);
 							if(node?.id) {
 								this.allTreeNodes[node.id] = node;
 							}
@@ -377,7 +383,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 		let vsConfigurations: ConnectionConfig[] = vscode.workspace.getConfiguration('ssh-connect').get('hosts') || [];
 		for (const configuration of vsConfigurations) {
-			const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
+			const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.id.split('/'), configuration);
 			if(node?.id) {
 				this.allTreeNodes[node!.id] = node!;
 			}
@@ -387,14 +393,15 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		for (const configurationSource of externalConfigSources) {
 			const configurations = await this.loadConfigsFromFile(configurationSource);
 			for (const configuration of configurations) {
-				const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.folder?.split('/') || [], configuration);
+				const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.id.split('/'), configuration);
 				if(node?.id) {
 					this.allTreeNodes[node.id] = node;
 				}
 			}
 		}
 
-		this.topTreeNodes = this.processNodeTree(nodeTree);
+		this.propagateNodeTreeConfig(nodeTree);
+		this.topTreeNodes = nodeTree;
 	}
 
 	private async loadConfigsFromFile(configurationSource: ConfigurationSource): Promise<ConnectionConfig[]> {
@@ -443,35 +450,46 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	}
 
 	private addToNodeTree(tree: TreeNode[], path: string[], config: ConnectionConfig, parent?: TreeNode): TreeNode | undefined {
-		const folder = path.shift();
-		if (folder) {
-			let folderNode: FolderNode | undefined = <FolderNode>tree.find(n => n.name === folder && n.type === 'folder');
-			if (!folderNode) {
-				folderNode = {
-					name: folder,
+		const name = path.shift()!;
+		const isLeaf = path.length === 0;
+		if (!isLeaf || 'host' in config === false) {
+			let node = tree.find(n => n.name === name);
+			if (!node) {
+				node = <FolderNode>{
+					name,
 					type: 'folder',
 					parent,
 					children: [],
-					config: config.id ? <ConnectionConfig>{} : config
+					config: isLeaf ? config : <ConnectionConfig>{}
 				};
-				tree.push(folderNode);
+				tree.push(node);
 			}
-			if(path.length === 0 && !config.id) {
-				folderNode.config = config;
+			else if (isLeaf && node.type === 'folder') {
+				(<FolderNode>node).config = config;
 			}
-			return this.addToNodeTree(folderNode.children, path, config, folderNode);
+			if (!isLeaf) {
+				return this.addToNodeTree((<FolderNode>node).children, path, config, node);
+			}
+			return node;
 		}
-		else if (config.id) {
-			const connectionNode: ConnectionNode = {
-				id: `${config.folder}/${config.id}`,
-				name: config.id,
+		else {
+			const connectionNode = <ConnectionNode>{
+				id: config.id,
+				name,
 				type: 'connection',
 				config,
 				parent,
 				children: []
 			};
 
-			tree.push(connectionNode);
+			let node = tree.find(n => n.name === name);
+			if (!node) {
+				tree.push(connectionNode);
+			}
+			else {
+				connectionNode.children = node.children;
+				tree[tree.indexOf(node)] = connectionNode;
+			}
 			
 			// port forwards
 			if (config.portForwards) {
@@ -498,43 +516,16 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 
 			return connectionNode;
 		}
-		return undefined;
 	}
 
-	private processNodeTree(tree: TreeNode[], parent?: TreeNode): TreeNode[] {
-		const newNodes: TreeNode[] = [];
-		const { iconPath, iconPathConnected, folder, ...filteredConfig } = (<FolderNode>parent)?.config || {};
-
+	private propagateNodeTreeConfig(tree: TreeNode[], config?: ConnectionConfig): void {
+		const { id, iconPath, iconPathConnected, ...filteredConfig } = config || {};
 		for (const node of tree) {
-			if (node.type === 'connection') {
-				const connectionNode = <ConnectionNode>node;
-				if (parent) {
-					connectionNode.config = { ...filteredConfig, ...connectionNode.config };
-				}
-				if (connectionNode.config.jumpServer) {
-					const jumpServer = tree.find((n) => n.type === 'connection' && (<ConnectionNode>n).name === connectionNode.config.jumpServer);
-					if (jumpServer) {
-						jumpServer.children.push(connectionNode);
-						connectionNode.parent = jumpServer;
-					}
-					else {
-						newNodes.push(node);
-					}
-				}
-				else {
-					newNodes.push(node);
-				}
+			const configNode = <ConnectionNode|FolderNode>node;
+			if (config) {
+				configNode.config = { ...filteredConfig, ...configNode.config };
 			}
-			else if (node.type === 'folder') {
-				const folderNode = <FolderNode>node;
-				folderNode.config = { ...filteredConfig, ...folderNode.config };
-				node.children = this.processNodeTree(node.children, node);
-				newNodes.push(node);
-			}
-			else {
-				newNodes.push(node);
-			}
+			this.propagateNodeTreeConfig(configNode.children, configNode.config);
 		}
-		return newNodes;
 	}
 }
