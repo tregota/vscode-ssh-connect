@@ -492,9 +492,37 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				tree[tree.indexOf(node)] = connectionNode;
 			}
 			
+			return connectionNode;
+		}
+	}
+
+	private processNodeTreeConfig(tree: TreeNode[], config?: ConnectionConfig): void {
+		const { id, description, iconPath, iconPathConnected, ...filteredConfig } = config || {};
+		for (const node of tree) {
+			if (node.type === 'portForward') {
+				continue;
+			}
+			const configNode = <ConnectionNode|FolderNode>node;
+			if ('loginPromptCommands' in filteredConfig && configNode.config.loginPromptCommands) {
+				configNode.config.loginPromptCommands.push(...filteredConfig.loginPromptCommands!);
+			}
+			if (config) {
+				configNode.config = { ...filteredConfig, ...configNode.config };
+			}
+			// interpolation that isn't dependent on real time stuff
+			if (configNode.config.iconPath) {
+				configNode.config.iconPath = vscodeVariables(configNode.config.iconPath);
+			}
+			if (configNode.config.iconPathConnected) {
+				configNode.config.iconPathConnected = vscodeVariables(configNode.config.iconPathConnected);
+			}
+
+			this.processNodeTreeConfig(configNode.children, configNode.type === 'folder' ? configNode.config : undefined);
+
 			// port forwards
-			if (config.portForwards) {
-				for (const portForward of config.portForwards) {
+			if (configNode.config.portForwards && configNode.type === 'connection') {
+				const portForwards: PortForwardNode[] = [];
+				for (const portForward of configNode.config.portForwards) {
 					let name = portForward.srcPort?.toString() || '';
 					if(portForward.dstAddr && !['localhost', '127.0.0.1', '::1'].includes(portForward.dstAddr)) {
 						name = `${name?name+' ':''}➝ ${portForward.dstAddr}${portForward.dstPort && portForward.dstPort !== portForward.srcPort ? `:${portForward.dstPort}` : ''}`;
@@ -507,33 +535,15 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						id: `${portForward.srcAddr}:${portForward.srcPort}:${portForward.dstAddr}:${portForward.dstPort}`,
 						name,
 						type: 'portForward',
-						parent: connectionNode,
+						parent: configNode,
 						portForward,
 						children: []
 					};
-					connectionNode.children.push(portForwardNode);
+					portForwards.push(portForwardNode);
 				}
+				configNode.children.unshift(...portForwards);
 			}
 
-			return connectionNode;
-		}
-	}
-
-	private processNodeTreeConfig(tree: TreeNode[], config?: ConnectionConfig): void {
-		const { id, iconPath, iconPathConnected, ...filteredConfig } = config || {};
-		for (const node of tree) {
-			if (node.type === 'portForward') {
-				continue;
-			}
-			const configNode = <ConnectionNode|FolderNode>node;
-			if (config) {
-				configNode.config = { ...filteredConfig, ...configNode.config };
-			}
-			// interpolation that isn't dependent on real time stuff
-			configNode.config.iconPath = configNode.config.iconPath && vscodeVariables(configNode.config.iconPath);
-			configNode.config.iconPathConnected = configNode.config.iconPathConnected && vscodeVariables(configNode.config.iconPathConnected);
-
-			this.processNodeTreeConfig(configNode.children, configNode.type === 'folder' ? configNode.config : undefined);
 		}
 	}
 }
