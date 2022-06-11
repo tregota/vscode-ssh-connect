@@ -196,14 +196,14 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			if (node.type === 'portForward' && node.portForward.dstPort) {
 				let portForward: PortForward;
 				let srcPort: number;
+				const connection = await this.connectionsProvider.connect(<ConnectionNode>node.parent);
 
 				if (node.portForward.srcPort) {
-					await this.connectionsProvider.openPort(node);
+					await this.connectionsProvider.forwardPort(connection, node);
 					srcPort = node.portForward.srcPort;
 				}
 				else {
-					const connection = await this.connectionsProvider.connect(<ConnectionNode>node.parent);
-					portForward = await this.connectionsProvider.forwardPortAndWait(connection, { dstPort: node.portForward.dstPort });
+					portForward = await this.connectionsProvider.forwardPort(connection, node);
 					if (!portForward.port) {
 						portForward.close();
 						throw new Error('Port forwarding failed');
@@ -294,14 +294,19 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			color = new vscode.ThemeColor("list.deemphasizedForeground");
 
 			if (!portForwardNode.portForward.srcPort && !!portForwardNode.portForward.link && !portForwardNode.portForward.link.startsWith('http')) {
+				const portForward = this.connectionsProvider.getPortForward(portForwardNode);
 				status = 'adhoc';
+				if (portForward?.status === 'online') {
+					status = 'online';
+
+				}
 			}
 			else if (!portForwardNode.portForward.srcPort || !portForwardNode.portForward.dstPort) {
 				color = new vscode.ThemeColor("list.errorForeground");
 				status = 'error';
 				description = 'bad config';
 			}
-			if (status !== 'error') {
+			else if (status !== 'error') {
 				status = this.connectionsProvider.getPortStatus(portForwardNode);
 			}
 
@@ -315,6 +320,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 						light: this.context.asAbsolutePath('media/port-online-light.svg')
 					};
 					break;
+				case 'adhoc':
 				case 'offline':
 					iconPath = this.context.asAbsolutePath('media/port-offline.svg');
 				case 'error':

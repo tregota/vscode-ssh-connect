@@ -57,7 +57,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				vscode.window.showErrorMessage(e.message);
 			}
 		});
-		vscode.commands.registerCommand('ssh-connect.openPort', (node: PortForwardNode) => connectionsProvider.openPort(node));
+		vscode.commands.registerCommand('ssh-connect.openPort', async (node: PortForwardNode) => {
+			try {
+				const connection = await connectionsProvider.connect(<ConnectionNode>node.parent);
+				connectionsProvider.forwardPort(connection, node);
+			} catch (e) {
+				outputChannel.appendLine(e.message);
+				vscode.window.showErrorMessage(e.message);
+			}
+		});
 		vscode.commands.registerCommand('ssh-connect.closePort', (node: PortForwardNode) => connectionsProvider.closePort(node));
 		vscode.commands.registerCommand('ssh-connect.openTerminal', (node: ConnectionNode) => connectionsProvider.openTerminal(node));
 

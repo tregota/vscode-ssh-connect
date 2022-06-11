@@ -13,9 +13,10 @@ const os = require('node:os');
 
 export interface PortForward {
 	status: 'offline' | 'connecting' | 'online' | 'error'
-	server: Server
+	server?: Server
 	port?: number
 	close: () => void
+	promise?: Promise<PortForward>
 }
 
 export interface Connection {
@@ -255,8 +256,9 @@ export default class ConnectionsProvider {
 	 * @param node 
 	 */
 	 private async autoForwardPorts(node: ConnectionNode): Promise<void> {
+		const connection = await this.connect(node);
 		for (const childNode of node.children.filter((child) => child.type === 'portForward' && (<PortForwardNode>child).portForward.autoConnect)) {
-			await this.openPort(<PortForwardNode>childNode);
+			await this.forwardPort(connection, <PortForwardNode>childNode);
 		}
 	}
 
@@ -265,116 +267,99 @@ export default class ConnectionsProvider {
 	 * @param node 
 	 * @returns 
 	 */
-	public async openPort(node: PortForwardNode): Promise<void> {
-		const parentNode = <ConnectionNode>node.parent;
-		let connection: Connection;
-		try {
-			connection = await this.connect(parentNode);
-
-			if (connection.ports[node.id]?.status === 'online') {
-				return;
-			}
-
-			if (node.portForward.srcPort! in this.ports) {
-				this.ports[node.portForward.srcPort!].close();
-			}
-
-			connection.ports[node.id] = this.forwardPort(connection, node.portForward);
-			this.refresh();
-			connection.ports[node.id].server.on('close', () => { this.refresh(); });
-			connection.ports[node.id].server.on('listening', () => { this.refresh(); });
+	public async forwardPort(connection: Connection, node: PortForwardNode): Promise<PortForward> {
+		if (node.id in connection.ports === false) {
+			connection.ports[node.id] = {
+				status: 'offline',
+				close: () => {}
+			};
 		}
-		catch (error) {
-			this.log(parentNode, error.message);
-			vscode.window.showErrorMessage(`${parentNode.id}: ${error.message}`);
-		}
-	}
 
-	public forwardPortAndWait(connection: Connection, options: Partial<PortForwardConfig>): Promise<PortForward> {
-		return new Promise((resolve, reject) => {
-			const portForward = this.forwardPort(connection, options);
-			portForward.server.on('listening', () => {
-				resolve(portForward);
-			});
-			portForward.server.on('error', (error) => {
-				reject(error);
-			});
-		});
-	}
-
-	private forwardPort(connection: Connection, options: Partial<PortForwardConfig>): PortForward {
-		const portForwardSockets = new Set<Socket>();
-		const portForward: PortForward = {
-			status: 'connecting',
-			port: options.srcPort,
-			server: new Server(),
-			close: () => {
-				if (portForward.server.listening) {
-					for (const socket of portForwardSockets) {
-						socket.destroy();
+		if(['offline', 'error'].includes(connection.ports[node.id].status)) {
+			connection.ports[node.id].promise = new Promise<PortForward>((resolve, reject) => {	
+				const portForwardSockets = new Set<Socket>();
+				const portForward = connection.ports[node.id];
+				portForward.status = 'connecting';
+				portForward.port = node.portForward.srcPort;
+				portForward.server = new Server();
+				portForward.close = () => {
+					if (portForward.server!.listening) {
+						for (const socket of portForwardSockets) {
+							socket.destroy();
+						}
+						portForward.server!.close();
 					}
-					portForward.server.close();
-				}
-			}
-		};
+				};
+				this.refresh();
 
-		// setup a forward streams for each new connection
-		portForward.server.on('connection', (socket) => {
-			portForwardSockets.add(socket);
-			connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, options.dstAddr || 'localhost', options.dstPort || 22, (error, stream) => {
-				if (error) {
+				// setup a forward streams for each new connection
+				portForward.server!.on('connection', (socket) => {
+					portForwardSockets.add(socket);
+					connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, node.portForward.dstAddr || 'localhost', node.portForward.dstPort || 22, (error, stream) => {
+						if (error) {
+							this.log(connection, `forwardPort: ${error.message}`);
+							vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
+							socket.destroy();
+							return;
+						}
+						socket.pipe(stream).pipe(socket);
+					});
+					socket.on("close", () => {
+						portForwardSockets.delete(socket);
+					});
+				});
+				
+				portForward.server!.on('error', (error) => {
+					if (portForward.status === 'connecting') {
+						portForward.status = 'error';
+						this.refresh();
+						portForward.server!.close();
+						reject(error);
+					}
 					this.log(connection, `forwardPort: ${error.message}`);
 					vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
-					socket.destroy();
-					return;
-				}
-				socket.pipe(stream).pipe(socket);
-			});
-			socket.on("close", () => {
-				portForwardSockets.delete(socket);
-			});
-		});
-		
-		portForward.server.on('error', (error) => {
-			if (portForward.status === 'connecting') {
-				portForward.status = 'error';
-				portForward.server.close();
-			}
-			this.log(connection, `forwardPort: ${error.message}`);
-			vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
-		});
+				});
 
-		portForward.server.on('close', () => {
-			if (portForward.status !== 'error') {
-				portForward.status = 'offline';
-			}
-		});
-
-		// if successful in opening port. setup a event listener to close the port forward server and its sockets when the connection is closed
-		portForward.server.on('listening', () => {
-			portForward.status = 'online';
-			connection.client!.on('close', () => {
-				if (portForward.server.listening) {
-					for (const socket of portForwardSockets) {
-						socket.destroy();
+				portForward.server!.on('close', () => {
+					if (portForward.status !== 'error') {
+						portForward.status = 'offline';
 					}
-					portForward.server.close();
-				}
+					this.refresh();
+					if (portForward.port) {
+						delete this.ports[portForward.port];
+					}
+				});
+
+				// if successful in opening port. setup a event listener to close the port forward server and its sockets when the connection is closed
+				portForward.server!.on('listening', () => {
+					portForward.status = 'online';
+					this.refresh();
+					resolve(portForward);
+
+					connection.client!.on('close', () => {
+						if (portForward.server!.listening) {
+							for (const socket of portForwardSockets) {
+								socket.destroy();
+							}
+							portForward.server!.close();
+						}
+					});
+
+					const address = portForward.server!.address();
+					if (address && typeof address !== 'string') {
+						portForward.port = address.port;
+					}
+					
+					if (portForward.port) {
+						this.ports[portForward.port] = portForward;
+					}
+				});
+
+				// listen 
+				portForward.server!.listen(node.portForward.srcPort);
 			});
-
-			const address = portForward.server.address();
-			if (address && typeof address !== 'string') {
-				portForward.port = address.port;
-			}
-			if (portForward.port) {
-				this.ports[portForward.port] = portForward;
-			}
-		});
-
-		// listen 
-		portForward.server.listen(options.srcPort);
-
-		return portForward;
+		}
+		return connection.ports[node.id].promise!;
 	}
 
 	/**
