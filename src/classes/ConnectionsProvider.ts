@@ -31,6 +31,7 @@ export interface Connection {
 		triedWithStoredPassword: boolean
 		neverWithStoredPassword: boolean
 		loginCancelCts: vscode.CancellationTokenSource
+		abort: () => void
 	}
 	promise?: Promise<Connection>
 }
@@ -99,7 +100,13 @@ export default class ConnectionsProvider {
 						enteredPassword: undefined,
 						triedWithStoredPassword: false,
 						neverWithStoredPassword: false,
-						loginCancelCts: new vscode.CancellationTokenSource()
+						loginCancelCts: new vscode.CancellationTokenSource(),
+						abort: () => {
+							connection.loginContext?.loginCancelCts.cancel();
+							connection.client?.end();
+							reject(new Error('Connection aborted'));
+							this.refresh();
+						}
 					};
 
 					this.log(connection, `connecting...`);
@@ -536,7 +543,7 @@ export default class ConnectionsProvider {
 					vscode.window.showInputBox(inputOptions, context.loginCancelCts.token).then((password) => {
 						if (password === undefined) {
 							this.log(connection, 'AuthHandler: Login canceled');
-							return connection.client!.end(); // will trigger loginCancelCts
+							return context.abort();
 						}
 						if (!context.neverWithStoredPassword) {
 							context.enteredPassword = password;
@@ -608,7 +615,7 @@ export default class ConnectionsProvider {
 							const response = await vscode.window.showInputBox(inputOptions, context.loginCancelCts.token);
 							if (response === undefined) {
 								this.log(connection, 'AuthHandler: Login canceled');
-								return connection.client!.end(); // will trigger loginCancelCts
+								return context.abort();
 							}
 							else {
 								responses.push(response);

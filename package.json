@@ -79,24 +79,36 @@
       {
         "command": "ssh-connect.connect",
         "title": "Connect",
-        "icon": "media/connect.svg",
+        "icon": {
+          "light": "media/connect-light.svg",
+          "dark": "media/connect.svg"
+        },
         "category": "SSH Connect"
       },
       {
         "command": "ssh-connect.disconnect",
         "title": "Disconnect",
-        "icon": "media/disconnect.svg",
+        "icon": {
+          "light": "media/disconnect-light.svg",
+          "dark": "media/disconnect.svg"
+        },
         "category": "SSH Connect"
       },
       {
         "command": "ssh-connect.openPort",
         "title": "Forward Port",
-        "icon": "media/connect.svg"
+        "icon": {
+          "light": "media/connect-light.svg",
+          "dark": "media/connect.svg"
+        }
       },
       {
         "command": "ssh-connect.closePort",
         "title": "Unforward Port",
-        "icon": "media/disconnect.svg"
+        "icon": {
+          "light": "media/disconnect-light.svg",
+          "dark": "media/disconnect.svg"
+        }
       },
       {
         "command": "ssh-connect.openTerminal",
@@ -106,7 +118,10 @@
       {
         "command": "ssh-connect.openLink",
         "title": "Open Link",
-        "icon": "media/openlink.svg"
+        "icon": {
+          "light": "media/openlink-light.svg",
+          "dark": "media/openlink.svg"
+        }
       },
       {
         "command": "ssh-connect.selectNode",
