@@ -158,12 +158,12 @@ export class NotebookController {
           vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
           vscode.NotebookCellOutputItem.json(trimmedOutputs)
         ]),
-        ...Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id]))
+        ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
       ]);
     };
     const print = (id: string, text: string) => {
-      outputs[id] = outputs[id] ? outputs[id] + text : text;
-      renewOutputs();
+        outputs[id] = outputs[id] ? outputs[id] + text : text;
+        renewOutputs();
     };
 
     const streams = new Set<ClientChannel>();

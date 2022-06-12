@@ -81,6 +81,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			(<any>edit).replaceNotebookCellMetadata(cell.notebook.uri, cell.index, { ...cell.metadata, runLocation: cell.metadata.runLocation !== 'client' ? 'client' : 'server' });
 			vscode.workspace.applyEdit(edit);
 		});
+		vscode.commands.registerCommand('ssh-connect.toggleEchoOff', (cell: vscode.NotebookCell) => {
+			const edit = new vscode.WorkspaceEdit();
+			(<any>edit).replaceNotebookCellMetadata(cell.notebook.uri, cell.index, { ...cell.metadata, echo: cell.metadata.echo !== 'off' ? 'off' : 'on' });
+			vscode.workspace.applyEdit(edit);
+		});
 
 		vscode.commands.registerCommand('ssh-connect.clearStoredPassword', (node: ConnectionNode) => {
 			keytar.deletePassword('vscode-ssh-connect', node.id);
