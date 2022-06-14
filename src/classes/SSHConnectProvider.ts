@@ -523,7 +523,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				configNode.config.iconPathConnected = vscodeVariables(configNode.config.iconPathConnected);
 			}
 
-			this.processNodeTreeConfig(configNode.children, configNode.type === 'folder' ? configNode.config : undefined);
+			this.processNodeTreeConfig(configNode.children, configNode.type === 'folder' ? configNode.config : config);
 
 			// port forwards
 			if (configNode.config.portForwards && configNode.type === 'connection') {
