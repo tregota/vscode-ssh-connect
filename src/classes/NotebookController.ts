@@ -130,7 +130,7 @@ export class NotebookController {
           if (aboveCell.outputs[aboveCell.outputs.length-1].items.length === 1 && aboveCell.outputs[aboveCell.outputs.length-1].items[0].mime === 'text/x-json') {
             outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[aboveCell.outputs.length-1].items[0].data.toString());
           }
-          else {
+          else if (aboveCell.outputs[0].items[1]?.mime === 'text/x-json') {
             outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
           }
         }
@@ -278,7 +278,7 @@ export class NotebookController {
           if (aboveCell.outputs[aboveCell.outputs.length-1].items.length === 1 && aboveCell.outputs[aboveCell.outputs.length-1].items[0].mime === 'text/x-json') {
             outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[aboveCell.outputs.length-1].items[0].data.toString());
           }
-          else {
+          else if (aboveCell.outputs[0].items[1]?.mime === 'text/x-json') {
             outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
           }
         }
