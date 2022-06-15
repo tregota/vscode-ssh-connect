@@ -212,10 +212,10 @@ export default class ConnectionsProvider {
 									privateKey: undefined // handled by authHandler
 								});
 								stream.on('close', () => {
-									this.log(connection, 'parent stream closed.');
+									this.log(connection, 'parent forward stream closed.');
 								});
 								stream.on('exit', (code, signal) => {
-									this.log(connection, `parent stream exited. ${code}: ${signal}`);
+									this.log(connection, `parent forward stream exited. ${code}: ${signal}`);
 								});
 							});
 						}

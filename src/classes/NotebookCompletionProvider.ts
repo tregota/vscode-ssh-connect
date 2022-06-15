@@ -7,6 +7,9 @@ export class NotebookCompletionProvider implements vscode.CompletionItemProvider
       return undefined;
     }
 
+    // nothing here works right now since document no longer have a notebook reference
+    // see: https://github.com/microsoft/vscode/issues/102091
+
     // validate that the javascript cell has runLocation set to client
     const completionItems: vscode.CompletionItem[] = [];
     const notebook: vscode.NotebookDocument = (<any>document).notebook;

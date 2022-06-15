@@ -290,7 +290,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 		}
 		else if (node.type === 'portForward' && node.parent) {
 			const portForwardNode = <PortForwardNode>node;
-			description = portForwardNode.portForward.description;
 			color = new vscode.ThemeColor("list.deemphasizedForeground");
 
 			if (!portForwardNode.portForward.srcPort && !!portForwardNode.portForward.link && !portForwardNode.portForward.link.startsWith('http')) {
@@ -298,7 +297,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				status = 'adhoc';
 				if (portForward?.status === 'online') {
 					status = 'online';
-
+					description = portForward.port?.toString();
 				}
 			}
 			else if (!portForwardNode.portForward.srcPort || !portForwardNode.portForward.dstPort) {
@@ -530,7 +529,10 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				const portForwards: PortForwardNode[] = [];
 				for (const portForward of configNode.config.portForwards) {
 					let name = portForward.srcPort?.toString() || '';
-					if(portForward.dstAddr && !['localhost', '127.0.0.1', '::1'].includes(portForward.dstAddr)) {
+					if (portForward.description) {
+						name = portForward.description;
+					}
+					else if (portForward.dstAddr && !['localhost', '127.0.0.1', '::1'].includes(portForward.dstAddr)) {
 						name = `${name?name+' ':''}➝ ${portForward.dstAddr}${portForward.dstPort && portForward.dstPort !== portForward.srcPort ? `:${portForward.dstPort}` : ''}`;
 					}
 					else if (portForward.dstPort && portForward.dstPort !== portForward.srcPort) {
@@ -538,7 +540,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 					}
 
 					const portForwardNode = <PortForwardNode>{
-						id: `${portForward.srcAddr}:${portForward.srcPort}:${portForward.dstAddr}:${portForward.dstPort}`,
+						id: `${portForward.srcAddr || ''}:${portForward.srcPort || ''}:${portForward.dstAddr || ''}:${portForward.dstPort}`,
 						name,
 						type: 'portForward',
 						parent: configNode,

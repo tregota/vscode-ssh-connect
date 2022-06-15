@@ -107,7 +107,7 @@
                 },
                 "description": {
                   "type": "string",
-                  "description": "port description"
+                  "description": "forward description, replaces default text along the lines of \"10443 -> 443\""
                 }
               }
             }
