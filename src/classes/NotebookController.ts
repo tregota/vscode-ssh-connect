@@ -294,17 +294,29 @@ export class NotebookController {
 
     let newHosts: (string | RegExp)[] = [];
     let textOutput = '';
-    const print = (text: string) => {
-      textOutput += text;
-      execution.replaceOutput([new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(textOutput, 'text/html')])]);
+    const print = (...args: any[]) => {
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (typeof arg === 'object') {
+          textOutput += (i > 0 && (typeof args[i-1] === 'object' || !args[i-1].startsWith('\u001b')) ? ' ' : '') + JSON.stringify(arg);
+        } else {
+          textOutput += (i > 0 && (typeof args[i-1] === 'object' || !args[i-1].startsWith('\u001b')) ? ' ' : '') + arg;
+        }
+      }
+      textOutput += '\n';
+      execution.replaceOutput([
+        new vscode.NotebookCellOutput([
+          vscode.NotebookCellOutputItem.stdout(textOutput)
+        ])
+      ]);
     };
 
     const context = {
       outputs,
       console: {
         ...console,
-        log: (...args: any[]) => print(args.join(' ')+'<br />'),
-        error: (...args: any[]) => print('<span style="color: #ff4b4b">'+args.join(' ')+'</span><br />'),
+        log: (...args: any[]) => print(...args),
+        error: (...args: any[]) => print("\u001b[31m", ...args, "\u001b[39m")
       },
       sshconnect: (...hostIds: (string | RegExp)[]) => {
         newHosts = hostIds;
@@ -324,14 +336,13 @@ export class NotebookController {
         microtaskMode: 'afterEvaluate',
       });
 
-      const newOutput = [];
-      if (textOutput) {
-        newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(textOutput, 'text/html')]));
-      }
+      const newOutput = [vscode.NotebookCellOutputItem.stdout(textOutput)];
       if (Object.keys(context.outputs).length > 0) {
-        newOutput.push(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.json(context.outputs)]));
+        newOutput.push(vscode.NotebookCellOutputItem.json(context.outputs));
       }
-      await execution.replaceOutput(newOutput);
+      await execution.replaceOutput([
+        new vscode.NotebookCellOutput(newOutput)
+      ]);
 
       const newConnections = newHosts.length > 0 ? await this.sshConnectProvider.connectAndSelect(...newHosts) : undefined;
 

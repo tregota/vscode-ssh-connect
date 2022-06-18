@@ -30,13 +30,15 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
       info.tooltip = 'previous cell\'s output for host inserted at placeholder {{output}}';
     }
 
-    const echoToggle = new vscode.NotebookCellStatusBarItem(
-      cell.metadata['echo'] === 'off' ? '$(eye-closed)' : '$(eye)',
-      vscode.NotebookCellStatusBarAlignment.Right
-    );
-    echoToggle.tooltip = cell.metadata['echo'] === 'off' ? 'Display outputs' : 'Hide outputs';
-    echoToggle.command = 'ssh-connect.toggleEchoOff';
-    statusBarItems.push(echoToggle);
+    if (cell.metadata['runLocation'] !== 'client') {
+      const echoToggle = new vscode.NotebookCellStatusBarItem(
+        cell.metadata['echo'] === 'off' ? '$(eye-closed)' : '$(eye)',
+        vscode.NotebookCellStatusBarAlignment.Right
+      );
+      echoToggle.tooltip = cell.metadata['echo'] === 'off' ? 'Display outputs' : 'Hide outputs';
+      echoToggle.command = 'ssh-connect.toggleEchoOff';
+      statusBarItems.push(echoToggle);
+    }
 
     return statusBarItems;
   }
