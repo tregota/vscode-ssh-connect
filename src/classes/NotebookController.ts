@@ -304,11 +304,10 @@ export class NotebookController {
         }
       }
       textOutput += '\n';
-      execution.replaceOutput([
-        new vscode.NotebookCellOutput([
-          vscode.NotebookCellOutputItem.stdout(textOutput)
-        ])
-      ]);
+      // TODO: figure out why this results in the last replaceOutput removes stdout output completely
+      // execution.replaceOutput(new vscode.NotebookCellOutput([
+      //   vscode.NotebookCellOutputItem.stdout(textOutput)
+      // ]));
     };
 
     const context = {
@@ -340,9 +339,7 @@ export class NotebookController {
       if (Object.keys(context.outputs).length > 0) {
         newOutput.push(vscode.NotebookCellOutputItem.json(context.outputs));
       }
-      await execution.replaceOutput([
-        new vscode.NotebookCellOutput(newOutput)
-      ]);
+      await execution.replaceOutput(new vscode.NotebookCellOutput(newOutput));
 
       const newConnections = newHosts.length > 0 ? await this.sshConnectProvider.connectAndSelect(...newHosts) : undefined;
 
@@ -350,7 +347,7 @@ export class NotebookController {
       return newConnections;
     } 
     catch (error) {
-      execution.replaceOutput([new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.error(error)])]);
+      execution.replaceOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.error(error)]));
       execution.end(false, Date.now());
       throw error;
     }
