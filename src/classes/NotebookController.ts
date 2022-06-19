@@ -158,7 +158,7 @@ export class NotebookController {
           vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
           vscode.NotebookCellOutputItem.json(trimmedOutputs)
         ]),
-        ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
+        ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
       ]);
     };
     const print = (id: string, text: string) => {

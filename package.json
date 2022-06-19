@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/tregota/vscode-ssh-connect/issues"
   },
-  "version": "0.4.1",
+  "version": "0.4.2",
   "engines": {
     "vscode": "^1.67.0"
   },
@@ -194,7 +194,7 @@
         },
         {
           "command": "ssh-connect.openLink",
-          "when": "view == ssh-connect.mainview && viewItem =~ /portForwardLinked.(online|offline|adhoc)/",
+          "when": "view == ssh-connect.mainview && viewItem =~ /portForwardLinked\\./",
           "group": "inline@0"
         },
         {
@@ -214,38 +214,6 @@
       "type": "object",
       "title": "SSH Connect configuration",
       "properties": {
-        "ssh-connect.sources": {
-          "type": "array",
-          "description": "Paths to external json files containg an array of SSH connection configurations, overrides vscode configured connections with same ids",
-          "default": [],
-          "items": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "file",
-                  "sftp"
-                ],
-                "default": "file",
-                "description": "configuration type"
-              },
-              "connection": {
-                "type": "string",
-                "description": "which host id to use if sftp. E.g. \"folder/subfolder/host\""
-              },
-              "autoConnect": {
-                "type": "boolean",
-                "default": true,
-                "description": "if true, connection will be automatically opened on startup and configuration loaded"
-              },
-              "path": {
-                "type": "string",
-                "description": "path to file either locally or on server, supports vscode variables"
-              }
-            }
-          }
-        },
         "ssh-connect.hosts": {
           "type": "array",
           "description": "Connection configurations, see SSH2 connect method docs for more info: https://github.com/mscdex/ssh2#client-methods. paths and commands support vscode variable interpolation, see https://github.com/DominicVonk/vscode-variables#readme",

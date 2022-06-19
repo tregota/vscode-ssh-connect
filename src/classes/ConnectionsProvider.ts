@@ -304,9 +304,13 @@ export default class ConnectionsProvider {
 					portForwardSockets.add(socket);
 					connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, node.portForward.dstAddr || 'localhost', node.portForward.dstPort || 22, (error, stream) => {
 						if (error) {
+							portForward.status = 'error';
+							this.refresh();
+							portForward.server!.close();
+
 							this.log(connection, `forwardPort: ${error.message}`);
 							vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
-							socket.destroy();
+							
 							return;
 						}
 						socket.pipe(stream).pipe(socket);

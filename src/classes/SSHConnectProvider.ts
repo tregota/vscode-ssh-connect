@@ -395,64 +395,8 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 			}
 		}
 
-		externalConfigSources = [...externalConfigSources, ...(vscode.workspace.getConfiguration('ssh-connect').get<ConfigurationSource[]>('sources') || [])];
-		for (const configurationSource of externalConfigSources) {
-			const configurations = await this.loadConfigsFromFile(configurationSource);
-			for (const configuration of configurations) {
-				const node = <ConnectionNode>this.addToNodeTree(nodeTree, configuration.id.split('/'), configuration);
-				if(node?.id) {
-					this.allTreeNodes[node.id] = node;
-				}
-			}
-		}
-
 		this.processNodeTreeConfig(nodeTree);
 		this.topTreeNodes = nodeTree;
-	}
-
-	private async loadConfigsFromFile(configurationSource: ConfigurationSource): Promise<ConnectionConfig[]> {
-		try {
-			let json;
-			let id;
-			switch (configurationSource.type) {
-				case 'file':
-					id = `file/${configurationSource.path}`;
-					if (this.configRefresh || !(id in this.externalConfigCache)) {
-						json = readFileSync(vscodeVariables(configurationSource.path), 'utf8');
-					}
-					break;
-				case 'sftp':
-					id = `sftp/${configurationSource.connection}/${configurationSource.path}`;
-					if (configurationSource.connection && (this.configRefresh || !(id in this.externalConfigCache))) {
-						if (configurationSource.connection in this.allTreeNodes) {
-							const node = <ConnectionNode>this.allTreeNodes[configurationSource.connection];
-							const status = this.connectionsProvider.getConnectionStatus(node);
-							if (configurationSource.autoConnect || status === 'online') {
-								await this.connectionsProvider.connect(node);
-								json = await this.connectionsProvider.readRemoteFile(node, vscodeVariables(configurationSource.path));
-								if (status === 'offline') {
-									await this.connectionsProvider.disconnect(node);
-								}
-							}
-						}
-					}
-					break;
-			}
-			if (id && (json || id in this.externalConfigCache)) {
-				let configurations;
-				if (json) {
-					try {
-						configurations = JSON.parse(json);
-						this.externalConfigCache[id] = configurations;
-					}
-					catch (e) {
-						vscode.window.showErrorMessage(`Could not parse configuration file - ${e.message}`);
-					}
-				}
-				return this.externalConfigCache[id];
-			}
-		} catch (e) {}
-		return [];
 	}
 
 	private addToNodeTree(tree: TreeNode[], path: string[], config: ConnectionConfig, parent?: TreeNode): TreeNode | undefined {
