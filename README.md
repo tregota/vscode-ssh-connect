@@ -8,7 +8,7 @@ A bit rough but makes my life easier so hopefully useful to others.
 [Check the SSH module documentation for connect configurations](https://github.com/mscdex/ssh2#client-methods)
 ```
 {
-  "hosts": [
+  "ssh-connect.hosts": [
     {
       "id": "somefolder",
       "iconPath": "C:\\Users\\user\\Pictures\\CompanyIcon.png"
@@ -37,4 +37,4 @@ A bit rough but makes my life easier so hopefully useful to others.
   ]
 }
 ```
-hosts can also be defined/overridden in vscode settings using "ssh-connect.hosts"
+Hosts can also be set in .vscode/sshconnect.json using "hosts" instead of "ssh-connect.hosts"
