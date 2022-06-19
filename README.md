@@ -15,10 +15,10 @@ All other parts of the path becomes folders, which can be used to set defaults f
 [Check the SSH module documentation for connect configurations](https://github.com/mscdex/ssh2#client-methods)
 ```
 {
-  "ssh-connect.hosts": [
+  "hosts": [
     {
       "id": "somefolder",
-      "iconPath": "C:\\Users\\user\\Pictures\\CompanyIcon.png"
+      "iconPath": "${workspaceFolder}/.vscode/foldericon.png"
     },
     {
       "id": "somefolder/jumpserver",
