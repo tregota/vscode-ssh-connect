@@ -4,7 +4,7 @@ Simple SSH tool.
 Uses mscdex's pure Javascript SSH2 module to try and make a PuTTY/MobaXterm alternative within vscode.  
 A bit rough but makes my life easier so hopefully useful to others.  
 
-### Example .vscode/sshconnect.json
+### Example settings
 [Check the SSH module documentation for connect configurations](https://github.com/mscdex/ssh2#client-methods)
 ```
 {
