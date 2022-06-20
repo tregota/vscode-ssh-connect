@@ -643,7 +643,7 @@ export default class ConnectionsProvider {
 			node = (<Connection>node).node;
 		}
 		if (node.config.enableDebug) {
-			this.outputChannel.appendLine(`${node.id}: ${message}`);
+			this.outputChannel.appendLine(`${(new Date()).toISOString()} :: ${node.id}: ${message}`);
 		}
 	}
 }
