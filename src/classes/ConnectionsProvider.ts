@@ -440,8 +440,9 @@ export default class ConnectionsProvider {
 				if (connection.node.config.privateKey && !context.triedMethods.includes('publickey')){
 					context.triedMethods.push('publickey');
 					try {
-						const key = readFileSync(vscodeVariables(connection.node.config.privateKey.toString()));
-						this.log(connection, `AuthHandler: Private Key from file ${connection.node.config.privateKey}`);
+						const privateKeyPath = vscodeVariables(connection.node.config.privateKey.toString());
+						const key = readFileSync(privateKeyPath);
+						this.log(connection, `AuthHandler: Private Key from file ${privateKeyPath}`);
 						return {
 							type: 'publickey',
 							username: connection.node.config.username!,
@@ -469,8 +470,9 @@ export default class ConnectionsProvider {
 				context.triedMethods.push('hostbased');
 				if (connection.node.config.privateKey) {
 					try {
-						const key = readFileSync(connection.node.config.privateKey);
-						this.log(connection, `AuthHandler: Hostbased auth with private key: ${connection.node.config.privateKey}`);
+						const privateKeyPath = vscodeVariables(connection.node.config.privateKey.toString());
+						const key = readFileSync(privateKeyPath);
+						this.log(connection, `AuthHandler: Hostbased auth with private key: ${privateKeyPath}`);
 						return <any>{
 							type: 'hostbased',
 							username: connection.node.config.username!,
