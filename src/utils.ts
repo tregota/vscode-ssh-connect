@@ -3,15 +3,16 @@ const process = require('process');
 const path = require('path');
 
 /**
- * converted from https://github.com/DominicVonk/vscode-variables
+ * converted and modified from https://github.com/DominicVonk/vscode-variables
  */
 export function vscodeVariables(string: string, recursive = false): string {
-    let workspaces = vscode.workspace.workspaceFolders;
-    let workspace = vscode.workspace.workspaceFolders.length ? vscode.workspace.workspaceFolders[0] : null;
-    let activeFile = vscode.window.activeTextEditor?.document;
-    let absoluteFilePath = activeFile?.uri.fsPath
-    string = string.replace(/\${workspaceFolder}/g, workspace?.uri.fsPath);
-    string = string.replace(/\${workspaceFolderBasename}/g, workspace?.name);
+  let workspaces = vscode.workspace.workspaceFolders;
+  let workspace = vscode.workspace.workspaceFolders.length ? vscode.workspace.workspaceFolders[0] : null;
+  string = string.replace(/\${workspaceFolder}/g, workspace?.uri.fsPath);
+  string = string.replace(/\${workspaceFolderBasename}/g, workspace?.name);
+  let activeFile = vscode.window.activeTextEditor?.document;
+  if (activeFile) {
+    let absoluteFilePath = activeFile?.uri.fsPath;
     string = string.replace(/\${file}/g, absoluteFilePath);
     let activeWorkspace = workspace;
     let relativeFilePath = absoluteFilePath;
@@ -34,15 +35,20 @@ export function vscodeVariables(string: string, recursive = false): string {
     string = string.replace(/\${pathSeparator}/g, path.sep);
     string = string.replace(/\${lineNumber}/g, vscode.window.activeTextEditor.selection.start.line + 1);
     string = string.replace(/\${selectedText}/g, vscode.window.activeTextEditor.document.getText(new vscode.Range(vscode.window.activeTextEditor.selection.start, vscode.window.activeTextEditor.selection.end)));
-    string = string.replace(/\${env:(.*?)}/g, (variable: string) => {
-        return process.env[variable.match(/\${env:(.*?)}/)![1]] || '';
-    });
-    string = string.replace(/\${config:(.*?)}/g, function (variable) {
-        return vscode.workspace.getConfiguration().get(variable.match(/\${config:(.*?)}/)![1], '');
-    });
+  }
+  else if(string.match(/\${(fileWorkspaceFolder|relativeFile|fileBasename|fileBasenameNoExtension|fileExtname|fileDirname|cwd|pathSeparator|lineNumber|selectedText)}/)) {
+    throw new Error(`Cannot replace file dependend vars in '${string}', no file active`);
+  }
 
-    if (recursive && string.match(/\${(workspaceFolder|workspaceFolderBasename|fileWorkspaceFolder|relativeFile|fileBasename|fileBasenameNoExtension|fileExtname|fileDirname|cwd|pathSeparator|lineNumber|selectedText|env:(.*?)|config:(.*?))}/)) {
-        string = vscodeVariables(string, recursive);
-    }
-    return string;
+  string = string.replace(/\${env:(.*?)}/g, (variable: string) => {
+    return process.env[variable.match(/\${env:(.*?)}/)![1]] || '';
+  });
+  string = string.replace(/\${config:(.*?)}/g, function (variable) {
+    return vscode.workspace.getConfiguration().get(variable.match(/\${config:(.*?)}/)![1], '');
+  });
+
+  if (recursive && string.match(/\${(workspaceFolder|workspaceFolderBasename|fileWorkspaceFolder|relativeFile|fileBasename|fileBasenameNoExtension|fileExtname|fileDirname|cwd|pathSeparator|lineNumber|selectedText|env:(.*?)|config:(.*?))}/)) {
+    string = vscodeVariables(string, recursive);
+  }
+  return string;
 }
