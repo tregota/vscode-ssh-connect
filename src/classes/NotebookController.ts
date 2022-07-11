@@ -113,14 +113,6 @@ export class NotebookController {
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
 
-    if (!connections.length) {
-      execution.appendOutput([
-        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in SSH Connect Hosts view, connect to a host or click on the row of one that is already connected.')])
-      ]);
-      execution.end(false, Date.now());
-      throw new Error('No script target');
-    }
-
     let outputs: { [key: string]: string } = {};
     try {
       if (cell.index > 0) {
@@ -135,132 +127,165 @@ export class NotebookController {
           }
         }
       }
+
+      let interpreter: string | undefined;
+      let targets: (string | RegExp)[] | undefined;
+      let rawscript = cell.document.getText();
+      if (rawscript.startsWith('#@') || rawscript.startsWith('#!')) {
+        const lines = rawscript.split('\n');
+        if (lines[0].startsWith('#@')) {
+          targets = [];
+          const targetString = lines.shift()!.substring(2);
+          for (const target of targetString.split('@').map((t) => t.trim())) {
+            const match = target.match(/^\/(.+)\/([^/]*)$/);
+            if (match) {
+              targets.push(new RegExp(match[1], match[2]));
+            }
+            else {
+              targets.push(target);
+            }
+          }
+        }
+        if (lines[0].startsWith('#!')) {
+          interpreter = lines.shift()?.substring(2);
+        }
+        rawscript = lines.join("\n");
+      }
+
+      if (!interpreter) {
+        if (cell.document.languageId === 'plaintext') {
+          execution.appendOutput([
+            new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('Plaintext needs shebang to tell which interpreter to call, escaped script string will be added as last argument')])
+          ]);
+          execution.end(false, Date.now());
+          throw new Error('Plaintext needs shebang');
+        }
+        else if (cell.document.languageId === 'python') {
+          interpreter = 'python -c';
+        }
+        else if (cell.document.languageId === 'perl') {
+          interpreter = 'perl -e';
+        }
+        else if (cell.document.languageId === 'javascript') {
+          interpreter = 'node -e';
+        }
+        else if (cell.document.languageId === 'php') {
+          interpreter = 'php -r';
+        }
+      }
+
+      if (targets) {
+        connections = await this.sshConnectProvider.connectAndSelect(...targets);
+      }
+
+      if (!connections.length) {
+        execution.appendOutput([
+          new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('No script target selected in SSH Connect Hosts view, connect to a host or click on the row of one that is already connected.')])
+        ]);
+        execution.end(false, Date.now());
+        throw new Error('No script target');
+      }
+
+      const errors: { [key: string]: Error } = {};
+      const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
+
+      const renewOutputs = async () => {
+        const trimmedOutputs : { [key: string]: string } = {};
+        for (const [id, text] of Object.entries(outputs)) {
+          trimmedOutputs[id] = text.trimEnd();
+        }
+
+        await execution.replaceOutput([
+          new vscode.NotebookCellOutput([
+            vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+            vscode.NotebookCellOutputItem.json(trimmedOutputs)
+          ]),
+          ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
+        ]);
+      };
+      const print = (id: string, text: string) => {
+          outputs[id] = outputs[id] ? outputs[id] + text : text;
+          renewOutputs();
+      };
+
+      const streams = new Set<ClientChannel>();
+      let canceled = false;
+
+      if (rawscript) {
+        const promises = connections.map((connection, i) => {
+          let command: string;
+          if (interpreter) {
+            command = `${interpreter} "${rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
+          }
+          else {
+            command = rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/\r\n/g, '\n');
+          }
+
+          outputs[connection.node.id] = '';
+
+          return new Promise<string>((resolve, reject) => {
+            connection.client!.exec(command, { pty: { cols: 200 } }, (err, stream) => {
+              if (err) {
+                print(connection.node.id, err.message);
+                return reject(err);
+              }
+              streams.add(stream);
+              
+              stream.on('close', (code: number) => {
+                streams.delete(stream);
+                if (code) {
+                  errors[connection.node.id] = new Error('Code: '+code);
+                  renewOutputs();
+                  reject(new Error('exit code: ' + code));
+                }
+                else if (canceled) {
+                  reject(new Error('canceled'));
+                }
+                else {
+                  resolve(outputs[i]);
+                }
+              }).on('data', (data: Buffer) => {
+                // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
+                print(connection.node.id, data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
+              }).stderr.on('data', (data: Buffer) => {
+                print(connection.node.id, data.toString());
+              });
+            });
+          });
+        });
+
+        execution.token.onCancellationRequested(() => {
+          canceled = true;
+          for (const stream of streams) {
+            stream.destroy();
+          }
+        });
+        
+        const resolvedPromises = await Promise.allSettled(promises);
+        await renewOutputs();
+        const failed = resolvedPromises.find(({ status }) => status === 'rejected');
+        if (failed) {
+          execution.end(false, Date.now());
+          throw (failed as PromiseRejectedResult).reason;
+        }
+        
+        if (targets) {
+          await this.sshConnectProvider.selectNode();
+        }
+
+        execution.end(true, Date.now());
+        return undefined;
+      }
+
+      throw new Error('Empty script');
     }
-    catch (e) {
+    catch (error) {
       execution.appendOutput([
-        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Error parsing output for cell at index ${cell.index-1}: ${e.message}`)])
+        new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(`Error parsing output for cell at index ${cell.index-1}: ${error.message}`)])
       ]);
       execution.end(false, Date.now());
       return;
     }
-
-    const errors: { [key: string]: Error } = {};
-    const nameById: { [key: string]: string } = connections.reduce((acc, connection) => ({ ...acc, [connection.node.id]: connection.node.name }), {});
-
-    const renewOutputs = async () => {
-      const trimmedOutputs : { [key: string]: string } = {};
-      for (const [id, text] of Object.entries(outputs)) {
-        trimmedOutputs[id] = text.trimEnd();
-      }
-
-      await execution.replaceOutput([
-        new vscode.NotebookCellOutput([
-          vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
-          vscode.NotebookCellOutputItem.json(trimmedOutputs)
-        ]),
-        ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
-      ]);
-    };
-    const print = (id: string, text: string) => {
-        outputs[id] = outputs[id] ? outputs[id] + text : text;
-        renewOutputs();
-    };
-
-    const streams = new Set<ClientChannel>();
-    let canceled = false;
-
-    let interpreter: string | undefined;
-    let rawscript = cell.document.getText();
-    if (rawscript.startsWith('#!')) {
-      const lines = rawscript.split('\n');
-      interpreter = lines.shift()?.substring(2);
-      rawscript = lines.join("\n");
-    }
-
-    if (!interpreter) {
-      if (cell.document.languageId === 'plaintext') {
-        execution.appendOutput([
-          new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text('Plaintext needs shebang to tell which interpreter to call, escaped script string will be added as last argument')])
-        ]);
-        execution.end(false, Date.now());
-        throw new Error('Plaintext needs shebang');
-      }
-      else if (cell.document.languageId === 'python') {
-        interpreter = 'python -c';
-      }
-      else if (cell.document.languageId === 'perl') {
-        interpreter = 'perl -e';
-      }
-      else if (cell.document.languageId === 'javascript') {
-        interpreter = 'node -e';
-      }
-      else if (cell.document.languageId === 'php') {
-        interpreter = 'php -r';
-      }
-    }
-
-    if (rawscript) {
-      const promises = connections.map((connection, i) => {
-        let command: string;
-        if (interpreter) {
-          command = `${interpreter} "${rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
-        }
-        else {
-          command = rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/\r\n/g, '\n');
-        }
-
-        outputs[connection.node.id] = '';
-
-        return new Promise<string>((resolve, reject) => {
-          connection.client!.exec(command, { pty: { cols: 200 } }, (err, stream) => {
-            if (err) {
-              print(connection.node.id, err.message);
-              return reject(err);
-            }
-            streams.add(stream);
-            
-            stream.on('close', (code: number) => {
-              streams.delete(stream);
-              if (code) {
-                errors[connection.node.id] = new Error('Code: '+code);
-                renewOutputs();
-                reject(new Error('exit code: ' + code));
-              }
-              else if (canceled) {
-                reject(new Error('canceled'));
-              }
-              else {
-                resolve(outputs[i]);
-              }
-            }).on('data', (data: Buffer) => {
-              // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
-              print(connection.node.id, data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
-            }).stderr.on('data', (data: Buffer) => {
-              print(connection.node.id, data.toString());
-            });
-          });
-        });
-      });
-
-      execution.token.onCancellationRequested(() => {
-        canceled = true;
-        for (const stream of streams) {
-          stream.destroy();
-        }
-      });
-      
-      const resolvedPromises = await Promise.allSettled(promises);
-      await renewOutputs();
-      const failed = resolvedPromises.find(({ status }) => status === 'rejected');
-      if (failed) {
-        execution.end(false, Date.now());
-        throw (failed as PromiseRejectedResult).reason;
-      }
-      execution.end(true, Date.now());
-      return undefined;
-    }
-    execution.end(false, Date.now());
-    throw new Error('Empty script');
   }
 
   private async _doLocalExecution(cell: vscode.NotebookCell, connections: Connection[]): Promise<Connection[] | undefined> {
