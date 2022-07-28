@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import ConnectionConfig, { PortForwardConfig } from './ConnectionConfig';
 import ConnectionsProvider, { Connection, PortForward } from './ConnectionsProvider';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { exec } from 'child_process';
+import { parse as jsoncParse } from 'jsonc-parser';
 import { vscodeVariables } from '../utils';
 
 export interface TreeNode {
@@ -42,7 +43,6 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private allTreeNodes: { [id: string]: ConnectionNode } = {};
 	private topTreeNodes: TreeNode[] = [];
 	private configRefresh: boolean = false;
-	private externalConfigCache: { [id: string]: ConnectionConfig[] } = {};
 	public notebookActive: boolean = false;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
@@ -52,8 +52,8 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				this.refresh();
 			}
 		});
-		vscode.workspace.createFileSystemWatcher('**/sshconnect.json').onDidChange((uri) => {
-			if (uri.path.endsWith('.vscode/sshconnect.json')) {
+		vscode.workspace.createFileSystemWatcher('**/sshconnect*.json*').onDidChange((uri) => {
+			if (uri.path.match(/\.vscode.sshconnect.*\.jsonc?$/)) {
 				this.configRefresh = true;
 				this.refresh();
 			}
@@ -361,27 +361,28 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private async loadNodeTree(): Promise<void> {
 		const nodeTree: TreeNode[] = [];
 		this.allTreeNodes = {};
-		let externalConfigSources: ConfigurationSource[] = [];
 
     if (vscode.workspace.workspaceFolders !== undefined) {
 			for (const workspaceFolder of vscode.workspace.workspaceFolders) {
-				const path = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'sshconnect.json').fsPath;
-				if (existsSync(path)) {
-					try {
-						const json = readFileSync(path, 'utf8');
-						const configuration = JSON.parse(json);
-						for (const connectionConfig of (configuration.hosts || [])) {
-							const node = <ConnectionNode>this.addToNodeTree(nodeTree, connectionConfig.id.split('/'), connectionConfig);
-							if(node?.id) {
-								this.allTreeNodes[node.id] = node;
+				const folderPath = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode').fsPath;
+				if (existsSync(folderPath)) {
+					const paths = readdirSync(folderPath);
+					for (const path of paths) {
+						if (path.match(/^sshconnect.*\.jsonc?$/)) {
+							try {
+								const json = readFileSync(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', path).fsPath, 'utf8');
+								const configuration = jsoncParse(json);
+								for (const connectionConfig of (configuration.hosts || [])) {
+									const node = <ConnectionNode>this.addToNodeTree(nodeTree, connectionConfig.id.split('/'), connectionConfig);
+									if(node?.id) {
+										this.allTreeNodes[node.id] = node;
+									}
+								}
+							}
+							catch (e) {
+								vscode.window.showErrorMessage(`Could not parse configuration file - ${e.message}`);
 							}
 						}
-						if (configuration.sources) {
-							externalConfigSources = [...externalConfigSources, ...(<ConfigurationSource[]>configuration.sources || [])];
-						}
-					}
-					catch (e) {
-						vscode.window.showErrorMessage(`Could not parse configuration file - ${e.message}`);
 					}
 				}
 			}

@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/tregota/vscode-ssh-connect/issues"
   },
-  "version": "0.4.3",
+  "version": "0.4.4",
   "engines": {
     "vscode": "^1.67.0"
   },
@@ -206,7 +206,10 @@
     },
     "jsonValidation": [
       {
-        "fileMatch": "sshconnect.json",
+        "fileMatch": [
+          "sshconnect*.json",
+          "sshconnect*.jsonc"
+        ],
         "url": "./jshintrc.sshconnect.json"
       }
     ],
@@ -477,6 +480,7 @@
   },
   "dependencies": {
     "json-stringify-safe": "^5.0.1",
+    "jsonc-parser": "^3.1.0",
     "keytar": "^7.9.0",
     "ssh2": "^1.8.0"
   }
