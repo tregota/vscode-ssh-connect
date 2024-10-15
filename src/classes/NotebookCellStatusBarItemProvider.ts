@@ -31,6 +31,16 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
     }
 
     if (cell.metadata['runLocation'] !== 'client') {
+      if (cell.metadata['echo'] !== 'off') {
+        const groupToggle = new vscode.NotebookCellStatusBarItem(
+          cell.metadata['group'] !== 'on' ? '$(layers)' : '$(layers-active)',
+          vscode.NotebookCellStatusBarAlignment.Right
+        );
+        groupToggle.tooltip = cell.metadata['group'] !== 'on' ? 'Group outputs' : 'Separate outputs';
+        groupToggle.command = 'ssh-connect.toggleGroupOutputs';
+        statusBarItems.push(groupToggle);
+      }
+
       const echoToggle = new vscode.NotebookCellStatusBarItem(
         cell.metadata['echo'] === 'off' ? '$(eye-closed)' : '$(eye)',
         vscode.NotebookCellStatusBarAlignment.Right

@@ -3,6 +3,7 @@ import * as vm from 'vm';
 import { ClientChannel } from 'ssh2';
 import { Connection } from './ConnectionsProvider';
 import SSHConnectProvider from './SSHConnectProvider';
+import { error } from 'console';
 
 export class NotebookController {
   readonly id: string = 'ssh-connect.notebook-controller';
@@ -195,13 +196,52 @@ export class NotebookController {
           trimmedOutputs[id] = text.trimEnd();
         }
 
-        await execution.replaceOutput([
-          new vscode.NotebookCellOutput([
-            vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
-            vscode.NotebookCellOutputItem.json(trimmedOutputs)
-          ]),
-          ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
-        ]);
+        if (cell.metadata.group === 'on') {
+          // group hosts by comparing output hashes
+          const outputGroups = new Map<string, Map<string | undefined, { ids: string[], error: Error }>>();
+
+          for (const [id, text] of Object.entries(outputs)) {
+            if (!text) {
+              continue;
+            }
+          
+            const textGroup = outputGroups.get(text);
+            const errorMessage = errors[id]?.message;
+          
+            if (textGroup) {
+              const errorGroup = textGroup.get(errorMessage);
+              if (errorGroup) {
+                errorGroup.ids.push(id);
+              } else {
+                textGroup.set(errorMessage, { ids: [id], error: errors[id] });
+              }
+            } else {
+              const newGroup = new Map<string | undefined, { ids: string[], error: Error }>();
+              newGroup.set(errorMessage, { ids: [id], error: errors[id] });
+              outputGroups.set(text, newGroup);
+            }
+          }
+
+          const celloutputs = Object.entries(outputGroups).flatMap(([text, errorgroups]) => errorgroups.values().map(({ids, error}: {ids: string[], error: Error}) => this.cssTerminal(ids.map((i: string) => nameById[i]).join(' + '), text, error)));
+          console.log(Object.entries(outputGroups));
+
+          await execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+              vscode.NotebookCellOutputItem.json(trimmedOutputs)
+            ]),
+            ...(cell.metadata.echo !== 'off' ? celloutputs : [])
+          ]);
+        }
+        else {
+          await execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+              vscode.NotebookCellOutputItem.json(trimmedOutputs)
+            ]),
+            ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
+          ]);
+        }
       };
       const print = (id: string, text: string) => {
           outputs[id] = outputs[id] ? outputs[id] + text : text;
@@ -224,7 +264,7 @@ export class NotebookController {
           outputs[connection.node.id] = '';
 
           return new Promise<string>((resolve, reject) => {
-            connection.client!.exec(command, { pty: { cols: 200 } }, (err, stream) => {
+            connection.client!.exec(command, { pty: { cols: 1000 } }, (err, stream) => {
               if (err) {
                 print(connection.node.id, err.message);
                 return reject(err);
@@ -245,8 +285,7 @@ export class NotebookController {
                   resolve(outputs[i]);
                 }
               }).on('data', (data: Buffer) => {
-                // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
-                print(connection.node.id, data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
+                print(connection.node.id, data.toString());
               }).stderr.on('data', (data: Buffer) => {
                 print(connection.node.id, data.toString());
               });
