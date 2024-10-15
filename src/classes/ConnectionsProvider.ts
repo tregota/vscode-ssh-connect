@@ -1,11 +1,10 @@
 import * as vscode from 'vscode';
-import { Client, AuthHandlerResult } from 'ssh2';
+import * as ssh2 from 'ssh2';
 import { Server, Socket } from 'net';
 import SSHTerminal from './SSHTerminal';
 import { readFileSync } from 'fs';
 import { ConnectionNode, PortForwardNode } from './SSHConnectProvider';
 import * as keytar from 'keytar';
-import { PortForwardConfig } from './ConnectionConfig';
 import { exec } from 'child_process';
 import { vscodeVariables } from '../utils';
 const os = require('node:os');
@@ -21,7 +20,7 @@ export interface PortForward {
 
 export interface Connection {
 	status: 'offline' | 'connecting' | 'online' | 'error'
-	client?: Client
+	client?: ssh2.Client
 	terminals: Set<SSHTerminal | vscode.Terminal>
 	ports: { [id: string]: PortForward }
 	node: ConnectionNode
@@ -35,8 +34,6 @@ export interface Connection {
 	}
 	promise?: Promise<Connection>
 }
-
-type AuthHandler = (methodsLeft: string[] | null, partialSuccess: boolean | null, callback: (nextAuth: AuthHandlerResult) => void) => void | AuthHandlerResult;
 
 export default class ConnectionsProvider {
 
@@ -92,7 +89,7 @@ export default class ConnectionsProvider {
 				try {
 					const connection = this.connections[node.id];
 					connection.status = 'connecting';
-					connection.client = new Client();
+					connection.client = new ssh2.Client();
 					connection.ports = {};
 					connection.node = node;
 					connection.loginContext = {
@@ -130,7 +127,7 @@ export default class ConnectionsProvider {
 
 					// on successfull connection
 					connection.client!.on('ready', () => {
-						this.log(connection, 'online.');
+						this.log(connection, 'Connection online.');
 						connection.status = 'online';
 						this.refresh();
 						resolve(connection);
@@ -154,14 +151,10 @@ export default class ConnectionsProvider {
 					});
 					
 					// on failed or closed connection
-					connection.client!.on('close', (hadError) => {
-						this.log(connection, `closed${hadError ? ' with error' : ''}`);
+					connection.client!.on("end", () => {
+						this.log(connection, 'Connection ended.');
 						connection.status = 'offline';
 						this.refresh();
-					});
-					// on failed or closed connection
-					connection.client!.on("end", () => {
-						this.log(connection, 'ended.');
 					});
 					
 					// print connection errors
@@ -214,7 +207,7 @@ export default class ConnectionsProvider {
 								stream.on('close', () => {
 									this.log(connection, 'parent forward stream closed.');
 								});
-								stream.on('exit', (code, signal) => {
+								stream.on('exit', (code: any, signal: any) => {
 									this.log(connection, `parent forward stream exited. ${code}: ${signal}`);
 								});
 							});
@@ -252,8 +245,8 @@ export default class ConnectionsProvider {
 			return Promise.reject(new Error('No connection provided'));
 		}
 		const connection = this.getConnection(node);
-		if (connection && connection.status === 'online') {
-			this.log(connection, 'disconnecting...');
+		if (connection && connection.status !== 'offline') {
+			this.log(connection, `is ${connection.status}, disconnecting...`);
 			connection.client?.end();
 		}
 	}
@@ -419,7 +412,7 @@ export default class ConnectionsProvider {
 		});
 	}
 
-	private async makeAuthHandler(connection: Connection): Promise<AuthHandler> {
+	private async makeAuthHandler(connection: Connection): Promise<ssh2.AuthHandlerMiddleware> {
 		const context = connection.loginContext!;
 
 		let storedPassword = await keytar.getPassword('vscode-ssh-connect', connection.node.id);
@@ -431,7 +424,7 @@ export default class ConnectionsProvider {
 		return (methodsLeft, partialSuccess, callback) => {
 			this.log(connection, `AuthHandler: methodsLeft: ${methodsLeft}`);
 			if (methodsLeft === null) {
-				return {
+				return <ssh2.NoAuthMethod>{
 					type: 'none',
 					username: connection.node.config.username!
 				};
@@ -443,7 +436,7 @@ export default class ConnectionsProvider {
 						const privateKeyPath = vscodeVariables(connection.node.config.privateKey.toString());
 						const key = readFileSync(privateKeyPath);
 						this.log(connection, `AuthHandler: Private Key from file ${privateKeyPath}`);
-						return {
+						return <ssh2.PublicKeyAuthMethod>{
 							type: 'publickey',
 							username: connection.node.config.username!,
 							key,
@@ -457,7 +450,7 @@ export default class ConnectionsProvider {
 				else if (connection.node.config.agent && !context.triedMethods.includes('agent')) {
 					context.triedMethods.push('agent');
 					this.log(connection, `AuthHandler: Private Key from Agent`);
-					return {
+					return <ssh2.AgentAuthMethod>{
 						type: 'agent',
 						username: connection.node.config.username!,
 						agent: vscodeVariables(connection.node.config.agent.toString())
@@ -473,7 +466,7 @@ export default class ConnectionsProvider {
 						const privateKeyPath = vscodeVariables(connection.node.config.privateKey.toString());
 						const key = readFileSync(privateKeyPath);
 						this.log(connection, `AuthHandler: Hostbased auth with private key: ${privateKeyPath}`);
-						return <any>{
+						return <ssh2.HostBasedAuthMethod>{
 							type: 'hostbased',
 							username: connection.node.config.username!,
 							key,
@@ -484,12 +477,12 @@ export default class ConnectionsProvider {
 					}
 					catch(error) {
 						this.log(connection, `AuthHandler: Private Key file read error - ${error.message}`);
-						callback(false);
+						return false;
 					}
 				}
 				else {
 					this.log(connection, `AuthHandler: Hostbased auth with no private key`);
-					return <any>{
+					return <ssh2.HostBasedAuthMethod>{
 						type: 'hostbased',
 						username: connection.node.config.username!,
 						localUsername: connection.node.config.localUsername,
@@ -502,13 +495,14 @@ export default class ConnectionsProvider {
 				if(connection.node.config.password) {
 					context.triedMethods.push('password');
 					this.log(connection, 'AuthHandler: Password auth');
-					return {
+					return <ssh2.PasswordAuthMethod>{
 						type: 'password',
 						username: connection.node.config.username!,
 						password: connection.node.config.password
 					};
 				}
 				else if (connection.node.config.loginPromptCommands?.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))) {
+					context.triedMethods.push('password');
 					const command = vscodeVariables(connection.node.config.loginPromptCommands.find(c => c.prompt.toLowerCase() === 'password' && (!c.os || c.os.toLowerCase() === os.platform()))!.command.replace('${prompt}', 'password').replace('${host}', connection.node.name));
 					this.log(connection, `AuthHandler: Password auth using command: ${command}`);
 					exec(command, (error, stdout) => {
@@ -570,7 +564,7 @@ export default class ConnectionsProvider {
 				return {
 					type: 'keyboard-interactive',
 					username: connection.node.config.username!,
-					prompt: async (name, instructions, instructionsLang, prompts, finish) => {
+					prompt: async (name: string, instructions: string, instructionsLang: string, prompts: ssh2.Prompt[], finish: any) => {
 						const responses: string[] = [];
 						for (const prompt of prompts) {
 							const requested = prompt.prompt.replace(': ', '').toLowerCase();

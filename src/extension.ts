@@ -27,7 +27,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		vscode.commands.registerCommand('ssh-connect.connect', async (node: ConnectionNode | string[]) => {
 			try {
-				if (node.constructor === Array) {
+				if (Array.isArray(node)) {
 					const connectionNode = await sshConnectProvider.connect(node[0]);
 					await sshConnectProvider.selectNode(connectionNode);
 				}
@@ -44,7 +44,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}); 
 		vscode.commands.registerCommand('ssh-connect.disconnect', async (node: ConnectionNode | string[]) => {
 			try {
-				if (node.constructor === Array) {
+				if (Array.isArray(node)) {
 					const connectionNode = await sshConnectProvider.disconnect(node[0]);
 					sshConnectProvider.unselectNode(connectionNode);
 				}

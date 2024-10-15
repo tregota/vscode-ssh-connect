@@ -352,8 +352,7 @@ export class NotebookController {
 
     try {
       const script = new vm.Script(execution.cell.document.getText());
-      vm.createContext(context);
-      script.runInContext(context, {
+      script.runInNewContext(context, {
         filename: execution.cell.document.uri.toString(),
         breakOnSigint: true,
         timeout: 1000 * 10,
