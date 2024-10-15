@@ -382,7 +382,7 @@ export class NotebookController {
     const headerTextColorVar = 'var(--vscode-editor-foreground)';
     const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; outline: 1px solid var(--vscode-notebook-inactiveFocusedCellBorder); outline-offset: -1px">
       <div style="padding: 4px 11px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
-      ${text ? '<pre style="padding: 10px 10px 11px 12px; margin: 0; max-height: 500px; overflow: auto; font-size: 11pt; color: var(--vscode-terminal-foreground); '+this.terminalCss+'">'+text+'</pre>' : ''}
+      ${text ? '<div style="overflow:auto; display:flex; flex-direction:column-reverse;max-height: 500px;"><pre style="padding: 10px 10px 11px 12px; margin: 0; font-size: 11pt; color: var(--vscode-terminal-foreground); '+this.terminalCss+'">'+text+'</pre></div>' : ''}
       ${error ? '<div style="padding: 4px 11px; background-color: '+windowColorVar+'; color: '+headerTextColorVar+'; font-weight: 500">'+error.message+'</div>' : ''}
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);
