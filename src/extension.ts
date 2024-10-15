@@ -78,12 +78,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		vscode.commands.registerCommand('ssh-connect.toggleRunLocation', (cell: vscode.NotebookCell) => {
 			const edit = new vscode.WorkspaceEdit();
-			(<any>edit).replaceNotebookCellMetadata(cell.notebook.uri, cell.index, { ...cell.metadata, runLocation: cell.metadata.runLocation !== 'client' ? 'client' : 'server' });
+			edit.set(cell.notebook.uri, [
+				vscode.NotebookEdit.updateCellMetadata(cell.index, { ...cell.metadata, runLocation: cell.metadata.runLocation !== 'client' ? 'client' : 'server' })
+			]);
 			vscode.workspace.applyEdit(edit);
 		});
 		vscode.commands.registerCommand('ssh-connect.toggleEchoOff', (cell: vscode.NotebookCell) => {
 			const edit = new vscode.WorkspaceEdit();
-			(<any>edit).replaceNotebookCellMetadata(cell.notebook.uri, cell.index, { ...cell.metadata, echo: cell.metadata.echo !== 'off' ? 'off' : 'on' });
+			edit.set(cell.notebook.uri, [
+				vscode.NotebookEdit.updateCellMetadata(cell.index, { ...cell.metadata, echo: cell.metadata.echo !== 'off' ? 'off' : 'on' })
+			]);
 			vscode.workspace.applyEdit(edit);
 		});
 
