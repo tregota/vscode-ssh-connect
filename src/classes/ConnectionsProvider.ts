@@ -152,14 +152,14 @@ export default class ConnectionsProvider {
 					
 					// on failed or closed connection
 					connection.client!.on('end', () => {
-						vscode.window.showErrorMessage(`${node.id}: Connection ended.`);
+						this.log(connection, 'Connection ended.');
 						if (connection.status !== 'error' && connection.status !== 'offline') {
 							connection.status = 'offline';
 							this.refresh();
 						}
 					});
 					connection.client.on('close', () => {
-						vscode.window.showErrorMessage(`${node.id}: Connection closed.`);
+						this.log(connection, 'Connection closed.');
 						if (connection.status !== 'error' && connection.status !== 'offline') {
 							connection.status = 'offline';
 							this.refresh();
