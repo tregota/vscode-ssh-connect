@@ -245,10 +245,14 @@ export class NotebookController {
         const promises = connections.map((connection, i) => {
           let command: string;
           if (interpreter) {
-            command = `${interpreter} "${rawscript.replace('{{output}}', outputsAbove[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
+            command = `${interpreter} "${rawscript.replace(/\{\{([^\}]+)\}\}/, (_, nodeId) => {
+              return outputsAbove[nodeId === 'output' ? connection.node.id : nodeId] || '';
+            }).replace(/(["$`\\])/g,'\\$1')}"`;
           }
           else {
-            command = rawscript.replace('{{output}}', outputsAbove[connection.node.id] || '').replace(/\r\n/g, '\n');
+            command = rawscript.replace(/\{\{([^\}]+)\}\}/, (_, nodeId) => {
+              return outputsAbove[nodeId === 'output' ? connection.node.id : nodeId] || '';
+            }).replace(/\r\n/g, '\n');
           }
 
           outputs[connection.node.id] = '';
