@@ -151,10 +151,19 @@ export default class ConnectionsProvider {
 					});
 					
 					// on failed or closed connection
-					connection.client!.on("end", () => {
-						this.log(connection, 'Connection ended.');
-						connection.status = 'offline';
-						this.refresh();
+					connection.client!.on('end', () => {
+						vscode.window.showErrorMessage(`${node.id}: Connection ended.`);
+						if (connection.status !== 'error' && connection.status !== 'offline') {
+							connection.status = 'offline';
+							this.refresh();
+						}
+					});
+					connection.client.on('close', () => {
+						vscode.window.showErrorMessage(`${node.id}: Connection closed.`);
+						if (connection.status !== 'error' && connection.status !== 'offline') {
+							connection.status = 'offline';
+							this.refresh();
+						}
 					});
 					
 					// print connection errors
@@ -166,6 +175,8 @@ export default class ConnectionsProvider {
 						else {
 							this.log(connection, error.message);
 							vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
+							connection.status = 'error';
+							this.refresh();
 						}
 					});
 					
