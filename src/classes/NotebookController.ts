@@ -113,21 +113,22 @@ export class NotebookController {
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
     execution.clearOutput();
 
-    let outputs: { [key: string]: string } = {};
+    let outputsAbove: { [key: string]: string } = {};
     try {
       if (cell.index > 0) {
         const aboveCell = cell.notebook.cellAt(cell.index-1);
         if (aboveCell && aboveCell.outputs.length > 0) {
           // is it a local javascript cell?
           if (aboveCell.outputs[aboveCell.outputs.length-1].items.length === 1 && aboveCell.outputs[aboveCell.outputs.length-1].items[0].mime === 'text/x-json') {
-            outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[aboveCell.outputs.length-1].items[0].data.toString());
+            outputsAbove = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[aboveCell.outputs.length-1].items[0].data.toString());
           }
           else if (aboveCell.outputs[0].items[1]?.mime === 'text/x-json') {
-            outputs = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
+            outputsAbove = <{ [key: string]: string }>JSON.parse(aboveCell.outputs[0].items[1].data.toString());
           }
         }
       }
 
+      let outputs: { [key: string]: string } = {};
       let interpreter: string | undefined;
       let targets: (string | RegExp)[] | undefined;
       let rawscript = cell.document.getText();
@@ -200,10 +201,7 @@ export class NotebookController {
           const outputGroups: { text: string, ids: string[], error?: Error }[] = [];
 
           // TODO: make this faster?
-          outputs:for (const [id, output] of Object.entries(outputs)) {
-            if (!output) {
-              continue;
-            }
+          outputs:for (let [id, output] of Object.entries(outputs)) {
             for (const {text, ids, error} of outputGroups) {
               if (output === text && error?.message === errors[id]?.message) {
                 ids.push(id);
@@ -231,7 +229,7 @@ export class NotebookController {
               vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
               vscode.NotebookCellOutputItem.json(trimmedOutputs)
             ]),
-            ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
+            ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
           ]);
         }
       };
@@ -247,10 +245,10 @@ export class NotebookController {
         const promises = connections.map((connection, i) => {
           let command: string;
           if (interpreter) {
-            command = `${interpreter} "${rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
+            command = `${interpreter} "${rawscript.replace('{{output}}', outputsAbove[connection.node.id] || '').replace(/(["$`\\])/g,'\\$1')}"`;
           }
           else {
-            command = rawscript.replace('{{output}}', outputs[connection.node.id] || '').replace(/\r\n/g, '\n');
+            command = rawscript.replace('{{output}}', outputsAbove[connection.node.id] || '').replace(/\r\n/g, '\n');
           }
 
           outputs[connection.node.id] = '';
@@ -413,7 +411,7 @@ export class NotebookController {
     const headerTextColorVar = 'var(--vscode-editor-foreground)';
     const html = `<div style="background-color: var(--vscode-terminal-background); border-radius: 3px; outline: 1px solid var(--vscode-notebook-inactiveFocusedCellBorder); outline-offset: -1px">
       <div style="padding: 4px 11px; background-color: ${windowColorVar}; color: ${headerTextColorVar}; font-weight: 500">${name}</div>
-      ${text ? '<div style="overflow:auto; display:flex; flex-direction:column-reverse;max-height: 500px;"><pre style="padding: 10px 10px 11px 12px; margin: 0; font-size: 11pt; color: var(--vscode-terminal-foreground); '+this.terminalCss+'">'+text+'</pre></div>' : ''}
+      <div style="overflow:auto; display:flex; flex-direction:column-reverse;max-height: 500px;"><pre style="padding: 10px 10px 11px 12px; margin: 0; font-size: 11pt; color: var(--vscode-terminal-foreground); ${this.terminalCss}">${text}</pre></div>
       ${error ? '<div style="padding: 4px 11px; background-color: '+windowColorVar+'; color: '+headerTextColorVar+'; font-weight: 500">'+error.message+'</div>' : ''}
     </div>`;
     return new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(html, 'text/html')]);

@@ -175,8 +175,6 @@ export default class ConnectionsProvider {
 						else {
 							this.log(connection, error.message);
 							vscode.window.showErrorMessage(`${node.id}: ${error.message}`);
-							connection.status = 'error';
-							this.refresh();
 						}
 					});
 					
@@ -229,7 +227,6 @@ export default class ConnectionsProvider {
 					}
 					else {
 						connection.client!.connect({
-							// tryKeyboard: true,
 							...node.config,
 							host: node.config.host,
 							port: node.config.port,
@@ -240,6 +237,7 @@ export default class ConnectionsProvider {
 					}
 				}
 				catch (error) {
+					vscode.window.showErrorMessage(`${node.id}: EXCEPTION : ${error.message}`);
 					reject(error);
 				}
 			});
