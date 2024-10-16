@@ -195,13 +195,45 @@ export class NotebookController {
           trimmedOutputs[id] = text.trimEnd();
         }
 
-        await execution.replaceOutput([
-          new vscode.NotebookCellOutput([
-            vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
-            vscode.NotebookCellOutputItem.json(trimmedOutputs)
-          ]),
-          ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
-        ]);
+        if (cell.metadata.group === 'on') {
+          // group hosts by comparing output hashes
+          const outputGroups: { text: string, ids: string[], error?: Error }[] = [];
+
+          // TODO: make this faster?
+          outputs:for (const [id, output] of Object.entries(outputs)) {
+            if (!output) {
+              continue;
+            }
+            for (const {text, ids, error} of outputGroups) {
+              if (output === text && error?.message === errors[id]?.message) {
+                ids.push(id);
+                continue outputs;
+              }
+            }
+            outputGroups.push({
+              text: output,
+              ids: [id],
+              error: errors[id]
+            });
+          }
+
+          await execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+              vscode.NotebookCellOutputItem.json(trimmedOutputs)
+            ]),
+            ...(cell.metadata.echo !== 'off' ? outputGroups.map(({text, ids, error}) => this.cssTerminal(ids.map((i: string) => nameById[i]).join(' + '), text, error)) : [])
+          ]);
+        }
+        else {
+          await execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+              vscode.NotebookCellOutputItem.json(trimmedOutputs)
+            ]),
+            ...(cell.metadata.echo !== 'off' ? Object.entries(nameById).filter(([id]) => !!outputs[id]).map(([id, name]) => this.cssTerminal(name, outputs[id], errors[id])) : [])
+          ]);
+        }
       };
       const print = (id: string, text: string) => {
           outputs[id] = outputs[id] ? outputs[id] + text : text;
@@ -224,7 +256,7 @@ export class NotebookController {
           outputs[connection.node.id] = '';
 
           return new Promise<string>((resolve, reject) => {
-            connection.client!.exec(command, { pty: { cols: 200 } }, (err, stream) => {
+            connection.client!.exec(command, { pty: { cols: 1000 } }, (err, stream) => {
               if (err) {
                 print(connection.node.id, err.message);
                 return reject(err);
@@ -245,8 +277,7 @@ export class NotebookController {
                   resolve(outputs[i]);
                 }
               }).on('data', (data: Buffer) => {
-                // cannot activate pty without ONLCR mode (for some reason) which converts NL to CR-NL so to fix that we remove all CR from result and hope nothing breaks
-                print(connection.node.id, data.toString().replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
+                print(connection.node.id, data.toString());
               }).stderr.on('data', (data: Buffer) => {
                 print(connection.node.id, data.toString());
               });

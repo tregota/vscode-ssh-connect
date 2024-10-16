@@ -90,6 +90,13 @@ export async function activate(context: vscode.ExtensionContext) {
 			]);
 			vscode.workspace.applyEdit(edit);
 		});
+		vscode.commands.registerCommand('ssh-connect.toggleGroupOutputs', (cell: vscode.NotebookCell) => {
+			const edit = new vscode.WorkspaceEdit();
+			edit.set(cell.notebook.uri, [
+				vscode.NotebookEdit.updateCellMetadata(cell.index, { ...cell.metadata, group: cell.metadata.group !== 'on' ? 'on' : 'off' })
+			]);
+			vscode.workspace.applyEdit(edit);
+		});
 
 		vscode.commands.registerCommand('ssh-connect.clearStoredPassword', (node: ConnectionNode) => {
 			keytar.deletePassword('vscode-ssh-connect', node.id);
