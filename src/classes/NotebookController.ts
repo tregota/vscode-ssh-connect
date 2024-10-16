@@ -198,39 +198,32 @@ export class NotebookController {
 
         if (cell.metadata.group === 'on') {
           // group hosts by comparing output hashes
-          const outputGroups = new Map<string, Map<string | undefined, { ids: string[], error: Error }>>();
+          const outputGroups: { text: string, ids: string[], error?: Error }[] = [];
 
-          for (const [id, text] of Object.entries(outputs)) {
-            if (!text) {
+          // TODO: make this faster?
+          outputs:for (const [id, output] of Object.entries(outputs)) {
+            if (!output) {
               continue;
             }
-          
-            const textGroup = outputGroups.get(text);
-            const errorMessage = errors[id]?.message;
-          
-            if (textGroup) {
-              const errorGroup = textGroup.get(errorMessage);
-              if (errorGroup) {
-                errorGroup.ids.push(id);
-              } else {
-                textGroup.set(errorMessage, { ids: [id], error: errors[id] });
+            for (const {text, ids, error} of outputGroups) {
+              if (output === text && error?.message === errors[id]?.message) {
+                ids.push(id);
+                continue outputs;
               }
-            } else {
-              const newGroup = new Map<string | undefined, { ids: string[], error: Error }>();
-              newGroup.set(errorMessage, { ids: [id], error: errors[id] });
-              outputGroups.set(text, newGroup);
             }
+            outputGroups.push({
+              text: output,
+              ids: [id],
+              error: errors[id]
+            });
           }
-
-          const celloutputs = Object.entries(outputGroups).flatMap(([text, errorgroups]) => errorgroups.values().map(({ids, error}: {ids: string[], error: Error}) => this.cssTerminal(ids.map((i: string) => nameById[i]).join(' + '), text, error)));
-          console.log(Object.entries(outputGroups));
 
           await execution.replaceOutput([
             new vscode.NotebookCellOutput([
               vscode.NotebookCellOutputItem.stdout(`Running on ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
               vscode.NotebookCellOutputItem.json(trimmedOutputs)
             ]),
-            ...(cell.metadata.echo !== 'off' ? celloutputs : [])
+            ...(cell.metadata.echo !== 'off' ? outputGroups.map(({text, ids, error}) => this.cssTerminal(ids.map((i: string) => nameById[i]).join(' + '), text, error)) : [])
           ]);
         }
         else {

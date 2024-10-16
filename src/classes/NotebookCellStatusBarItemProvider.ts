@@ -33,7 +33,7 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
     if (cell.metadata['runLocation'] !== 'client') {
       if (cell.metadata['echo'] !== 'off') {
         const groupToggle = new vscode.NotebookCellStatusBarItem(
-          cell.metadata['group'] !== 'on' ? '$(layers)' : '$(layers-active)',
+          cell.metadata['group'] !== 'on' ? '$(multiple-windows)' : '$(combine)',
           vscode.NotebookCellStatusBarAlignment.Right
         );
         groupToggle.tooltip = cell.metadata['group'] !== 'on' ? 'Group outputs' : 'Separate outputs';
