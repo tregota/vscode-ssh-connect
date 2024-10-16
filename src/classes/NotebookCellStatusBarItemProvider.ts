@@ -30,7 +30,7 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
       info.tooltip = 'previous cell\'s output for host inserted at placeholder {{output}}';
     }
 
-    if (cell.metadata['runLocation'] !== 'client') {
+    if (cell.metadata['runLocation'] !== 'client' || cell.document.languageId !== 'javascript') {
       if (cell.metadata['echo'] !== 'off') {
         const groupToggle = new vscode.NotebookCellStatusBarItem(
           cell.metadata['group'] !== 'on' ? '$(multiple-windows)' : '$(combine)',
