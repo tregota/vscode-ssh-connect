@@ -1,3 +1,4 @@
+import  { createWriteStream, existsSync, mkdirSync } from 'fs';
 import * as vscode from 'vscode';
 import * as vm from 'vm';
 import { ClientChannel } from 'ssh2';
@@ -196,7 +197,7 @@ export class NotebookController {
           trimmedOutputs[id] = text.trimEnd();
         }
 
-        if (cell.metadata.group === 'on') {
+        if (cell.metadata.output === 'groups') {
           // group hosts by comparing output hashes
           const outputGroups: { text: string, ids: string[], error?: Error }[] = [];
 
@@ -221,6 +222,14 @@ export class NotebookController {
               vscode.NotebookCellOutputItem.json(trimmedOutputs)
             ]),
             ...(cell.metadata.echo !== 'off' ? outputGroups.map(({text, ids, error}) => this.cssTerminal(ids.map((i: string) => nameById[i]).join(' + '), text, error)) : [])
+          ]);
+        }
+        else if (cell.metadata.output === 'files') {
+          await execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+              vscode.NotebookCellOutputItem.stdout(`Writing to files for ${connections.map(c => `"${c.node.name}"`).join(', ')}...`),
+              vscode.NotebookCellOutputItem.json(trimmedOutputs)
+            ])
           ]);
         }
         else {
@@ -278,11 +287,24 @@ export class NotebookController {
                 else {
                   resolve(outputs[i]);
                 }
-              }).on('data', (data: Buffer) => {
-                print(connection.node.id, data.toString());
               }).stderr.on('data', (data: Buffer) => {
                 print(connection.node.id, data.toString());
               });
+
+              if (cell.metadata.output === 'files') {
+                const basepath = vscode.Uri.joinPath(cell.document.uri, '..', 'output');
+                if (!existsSync(basepath.fsPath)) {
+                  mkdirSync(basepath.fsPath);
+                }
+                let filename = vscode.Uri.joinPath(basepath, `${connection.node.id.replace(/[^a-z0-9]+/gi, '-')}.output`);
+                var filestream = createWriteStream(filename.fsPath);
+                stream.pipe(filestream);
+              }
+              else {
+                stream.on('data', (data: Buffer) => {
+                  print(connection.node.id, data.toString());
+                });
+              }
             });
           });
         });

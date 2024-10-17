@@ -33,11 +33,11 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
     if (cell.metadata['runLocation'] !== 'client' || cell.document.languageId !== 'javascript') {
       if (cell.metadata['echo'] !== 'off') {
         const groupToggle = new vscode.NotebookCellStatusBarItem(
-          cell.metadata['group'] !== 'on' ? '$(multiple-windows)' : '$(combine)',
+          cell.metadata['output'] === 'groups' ? '$(combine)' : cell.metadata['output'] === 'files' ? '$(save-all)' : '$(multiple-windows)',
           vscode.NotebookCellStatusBarAlignment.Right
         );
-        groupToggle.tooltip = cell.metadata['group'] !== 'on' ? 'Group outputs' : 'Separate outputs';
-        groupToggle.command = 'ssh-connect.toggleGroupOutputs';
+        groupToggle.tooltip = cell.metadata['output'] === 'groups' ? 'Grouping outputs' : cell.metadata['output'] === 'files' ? 'Writing outputs to files' : 'Separate outputs',
+        groupToggle.command = 'ssh-connect.switchOutputMethod';
         statusBarItems.push(groupToggle);
       }
 
@@ -45,7 +45,7 @@ export class NotebookCellStatusBarItemProvider implements vscode.NotebookCellSta
         cell.metadata['echo'] === 'off' ? '$(eye-closed)' : '$(eye)',
         vscode.NotebookCellStatusBarAlignment.Right
       );
-      echoToggle.tooltip = cell.metadata['echo'] === 'off' ? 'Display outputs' : 'Hide outputs';
+      echoToggle.tooltip = cell.metadata['echo'] === 'off' ? 'Hiding outputs' : 'Displaying outputs';
       echoToggle.command = 'ssh-connect.toggleEchoOff';
       statusBarItems.push(echoToggle);
     }

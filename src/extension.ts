@@ -90,10 +90,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			]);
 			vscode.workspace.applyEdit(edit);
 		});
-		vscode.commands.registerCommand('ssh-connect.toggleGroupOutputs', (cell: vscode.NotebookCell) => {
+		vscode.commands.registerCommand('ssh-connect.switchOutputMethod', (cell: vscode.NotebookCell) => {
 			const edit = new vscode.WorkspaceEdit();
 			edit.set(cell.notebook.uri, [
-				vscode.NotebookEdit.updateCellMetadata(cell.index, { ...cell.metadata, group: cell.metadata.group !== 'on' ? 'on' : 'off' })
+				vscode.NotebookEdit.updateCellMetadata(cell.index, { ...cell.metadata, output: cell.metadata.output === 'groups' ?  'files' : cell.metadata.output === 'files' ? 'normal' : 'groups' })
 			]);
 			vscode.workspace.applyEdit(edit);
 		});
