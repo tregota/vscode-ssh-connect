@@ -129,7 +129,7 @@ export class NotebookController {
         }
       }
 
-      let outputs: { [key: string]: string } = {};
+      let outputs = { ...outputsAbove }; // copy of outputs
       let interpreter: string | undefined;
       let targets: (string | RegExp)[] | undefined;
       let rawscript = cell.document.getText();
