@@ -292,11 +292,12 @@ export class NotebookController {
               });
 
               if (cell.metadata.output === 'files') {
-                const basepath = vscode.Uri.joinPath(cell.document.uri, '..', 'output');
-                if (!existsSync(basepath.fsPath)) {
-                  mkdirSync(basepath.fsPath);
+                const sshbookname = cell.document.uri.path.split('/').pop();
+                const outputfolder = vscode.Uri.joinPath(cell.document.uri, '..', sshbookname?.replace('.sshbook', '_output') || 'output');
+                if (!existsSync(outputfolder.fsPath)) {
+                  mkdirSync(outputfolder.fsPath);
                 }
-                let filename = vscode.Uri.joinPath(basepath, `${connection.node.id.replace(/[^a-z0-9]+/gi, '-')}.output`);
+                let filename = vscode.Uri.joinPath(outputfolder, `${connection.node.id.replace(/[^a-z0-9]+/gi, '-')}.output`);
                 var filestream = createWriteStream(filename.fsPath);
                 stream.pipe(filestream);
               }
