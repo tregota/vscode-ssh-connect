@@ -317,19 +317,31 @@ export default class ConnectionsProvider {
                 // setup a forward streams for each new connection
                 portForward.server!.on('connection', (socket) => {
                     portForwardSockets.add(socket);
-                    connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, node.portForward.dstAddr || 'localhost', node.portForward.dstPort || 22, (error, stream) => {
-                        if (error) {
-                            portForward.status = 'error';
-                            this.refresh();
-                            portForward.server!.close();
 
+                    const streamHandler: ssh2.ClientCallback = (error, stream) => {
+                        if (error) {
                             this.log(connection, `forwardPort: ${error.message}`);
                             vscode.window.showErrorMessage(`forwardPort: ${error.message}`);
-                            
                             return;
                         }
                         socket.pipe(stream).pipe(socket);
-                    });
+                    }
+
+                    if (connection.node.config.tunnelingMethod?.toLowerCase() === 'netcat') {
+                        connection.client!.exec(`nc ${node.portForward.dstAddr || 'localhost'} ${node.portForward.dstPort || 22}`, streamHandler);
+                    }
+                    else if (connection.node.config.tunnelingMethod?.toLowerCase() === 'socat') {
+                        connection.client!.exec(`socat - tcp:${node.portForward.dstAddr || 'localhost'}:${node.portForward.dstPort || 22}`, streamHandler);
+                    }
+                    else if (connection.node.config.tunnelingMethod && connection.node.config.tunnelingMethod?.toLowerCase() !== 'tcpforwarding') {
+                        connection.client!.exec(connection.node.config.tunnelingMethod.replace('${host}', node.portForward.dstAddr || 'localhost').replace('${port}', node.portForward.dstPort?.toString() || '22'), streamHandler);
+                    }
+                    else {
+                        connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, node.portForward.dstAddr || 'localhost', node.portForward.dstPort || 22, streamHandler);
+                    }
+
+
+
                     socket.on("close", () => {
                         portForwardSockets.delete(socket);
                     });
