@@ -249,6 +249,11 @@
                 "default": false,
                 "description": "If set, debug messages will be logged to the console"
               },
+              "tunnelingMethod": {
+                "type": "string",
+                "default": "TcpForwarding",
+                "description": "Tunneling method (TcpForwarding|Netcat|Socat) or command to run (that works like netcat) ${host} and ${port} are replaced with the target host and port"
+              },
               "portForwards": {
                 "type": "array",
                 "description": "Port Forwards",

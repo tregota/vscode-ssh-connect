@@ -16,6 +16,7 @@ export default interface ConnectionConfig extends ConnectConfig {
     iconPath?: string
     iconPathConnected?: string
     x11Port?: number
+    tunnelingMethod?: string
     portForwards?: PortForwardConfig[]
     loginPromptCommands?: Array<{ prompt: string, command: string, os?: "aix" | "darwin" | "freebsd" | "linux" | "openbsd" | "sunos" | "win32" | "android" }>
     enableDebug?: boolean
