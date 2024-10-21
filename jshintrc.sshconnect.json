@@ -34,10 +34,10 @@
             "default": false,
             "description": "If set, debug messages will be logged to the console"
           },
-          "sshShellPath": {
+          "tunnelingMethod": {
             "type": "string",
-            "default": "ssh",
-            "description": "if you want to use a ssh client other than the built-in one for shell sessions"
+            "default": "TcpForwarding",
+            "description": "Tunneling method (TcpForwarding|Netcat|Socat) or command to run (that works like netcat) ${host} and ${port} are replaced with the target host and port"
           },
           "portForwards": {
             "type": "array",
