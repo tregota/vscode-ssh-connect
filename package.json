@@ -14,7 +14,7 @@
   "bugs": {
     "url": "https://github.com/tregota/vscode-ssh-connect/issues"
   },
-  "version": "0.4.7",
+  "version": "0.4.8",
   "engines": {
     "vscode": "^1.94.0"
   },
