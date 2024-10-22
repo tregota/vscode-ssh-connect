@@ -1,6 +1,7 @@
 import { window, Event, EventEmitter, Pseudoterminal, Terminal, TerminalDimensions, TerminalLocation } from 'vscode';
-import { Client, ClientChannel } from 'ssh2';
+import { ClientChannel } from 'ssh2';
 import ConnectionsProvider, { Connection } from './ConnectionsProvider';
+import * as vscode from 'vscode';
 
 export default class SSHTerminal implements Pseudoterminal {
 
@@ -41,7 +42,8 @@ export default class SSHTerminal implements Pseudoterminal {
 
         if(!this.terminal) {
           this.terminal = window.createTerminal({
-            name: this.connection.node.name, 
+            name: this.connection.node.name,
+            iconPath: vscode.Uri.joinPath(this.connectionsProvider.context.extensionUri, "media", "terminal.svg"),
             location: TerminalLocation.Editor,
             pty: this
           });

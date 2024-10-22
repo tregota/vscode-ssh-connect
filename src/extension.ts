@@ -13,7 +13,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	try {
 		const outputChannel = vscode.window.createOutputChannel("SSH Connect");
 
-		const connectionsProvider = new ConnectionsProvider(outputChannel);
+		const connectionsProvider = new ConnectionsProvider(context, outputChannel);
 		const sshConnectProvider = new SSHConnectProvider(context, connectionsProvider);
 		vscode.window.registerTreeDataProvider('ssh-connect.mainview', sshConnectProvider);
 

@@ -43,7 +43,7 @@ export default class ConnectionsProvider {
     public connections: { [id: string]: Connection } = {};
     public ports: { [port: number]: PortForward } = {};
 
-    constructor(private readonly outputChannel: vscode.OutputChannel) {
+    constructor(public readonly context: vscode.ExtensionContext, private readonly outputChannel: vscode.OutputChannel) {
     }
 
   public refresh(): void {
@@ -325,7 +325,7 @@ export default class ConnectionsProvider {
                             return;
                         }
                         socket.pipe(stream).pipe(socket);
-                    }
+                    };
 
                     if (connection.node.config.tunnelingMethod?.toLowerCase() === 'netcat') {
                         connection.client!.exec(`nc ${node.portForward.dstAddr || 'localhost'} ${node.portForward.dstPort || 22}`, streamHandler);
@@ -339,8 +339,6 @@ export default class ConnectionsProvider {
                     else {
                         connection.client!.forwardOut(socket.remoteAddress || '', socket.remotePort || 0, node.portForward.dstAddr || 'localhost', node.portForward.dstPort || 22, streamHandler);
                     }
-
-
 
                     socket.on("close", () => {
                         portForwardSockets.delete(socket);

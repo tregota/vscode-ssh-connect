@@ -45,7 +45,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 	private configRefresh: boolean = false;
 	public notebookActive: boolean = false;
 
-	constructor(private readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
+	constructor(public readonly context: vscode.ExtensionContext, private readonly connectionsProvider: ConnectionsProvider) {
 		vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
 			if (event.affectsConfiguration('ssh-connect.hosts') || event.affectsConfiguration('ssh-connect.sources')) {
 				this.configRefresh = true;
@@ -467,6 +467,7 @@ export default class SSHConnectProvider implements vscode.TreeDataProvider<TreeN
 				configNode.config.iconPathConnected = vscodeVariables(configNode.config.iconPathConnected);
 			}
 
+			// folders may add default configuration to downstream nodes but nodes may not
 			this.processNodeTreeConfig(configNode.children, configNode.type === 'folder' ? configNode.config : config);
 
 			// port forwards
